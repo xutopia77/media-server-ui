@@ -133,7 +133,7 @@ export interface HeartBeatInfo {
 }
 
 export interface GbInfo {
-  users: any[]
+  users: string[]
 }
 
 export interface RoomData {

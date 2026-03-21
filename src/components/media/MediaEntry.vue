@@ -12,14 +12,24 @@
             v-for="user in users"
             :key="user.id"
             class="user-item"
-            :class="{ active: user.id === currentUser.id }"
+            :class="{ active: user.id === currentUser.id, 'local-user': user.id === 'local', 'remote-user': user.id !== 'local' }"
           >
-            <div class="user-avatar">{{ user.name.charAt(0) }}</div>
+            <div class="user-avatar" :class="{ 'local-avatar': user.id === 'local', 'remote-avatar': user.id !== 'local' }">
+              {{ user.id === 'local' ? 'L' : (user.streamId ? user.streamId.charAt(0) : 'R') }}
+            </div>
             <div class="user-info">
-              <span class="user-name">{{ user.name }}</span>
-              <span class="user-status" :class="user.status">
-                {{ user.status }}
-              </span>
+              <span class="user-name">{{ user.id === 'local' ? 'Local' : (user.streamId || user.uid) }}</span>
+              <div class="user-details">
+                <span class="user-status" :class="user.status">
+                  {{ user.status }}
+                </span>
+                <span v-if="user.publishers !== undefined" class="user-stat">
+                  📡 {{ user.publishers }}
+                </span>
+                <span v-if="user.subscribers !== undefined" class="user-stat">
+                  👥 {{ user.subscribers }}
+                </span>
+              </div>
             </div>
           </div>
         </div>
@@ -177,7 +187,7 @@
               autoplay
               playsinline
             ></video>
-            <div class="video-label">{{ remoteUser.name }}</div>
+            <div class="video-label">{{ remoteUser.streamId || remoteUser.uid || remoteUser.id }}</div>
             <div class="video-status">
               <span class="status-dot"></span>
               {{ remoteUser.status }}
@@ -203,8 +213,14 @@ import * as Dty from '@/utils/dataTypedef'
 
 interface User {
   id: string
-  name: string
   status: 'online' | 'offline' | 'busy'
+  appId?: string
+  publishers?: number
+  streamDir?: string
+  streamId?: string
+  subscribers?: number
+  type?: string
+  uid?: string
 }
 
 interface RemoteUser extends User {
@@ -227,21 +243,16 @@ interface WebRTCSettings {
 
 const currentUser = ref<User>({
   id: 'local',
-  name: 'You',
   status: 'online'
 })
 
 const users = ref<User[]>([
-  { id: 'local', name: 'You', status: 'online' },
-  { id: 'user1', name: 'Alice', status: 'online' },
-  { id: 'user2', name: 'Bob', status: 'online' },
-  { id: 'user3', name: 'Charlie', status: 'offline' },
-  { id: 'user4', name: 'Diana', status: 'busy' },
+  { id: 'local', status: 'online' },
 ])
 
 const remoteUsers = ref<RemoteUser[]>([
-  { id: 'user1', name: 'Alice', status: 'online' },
-  { id: 'user2', name: 'Bob', status: 'online' },
+  { id: 'user1', status: 'online' },
+  { id: 'user2', status: 'online' },
 ])
 
 const localVideoRef = ref<HTMLVideoElement | null>(null)
@@ -382,6 +393,25 @@ const fetchRoomInfo = async () => {
     const info = await rtcApi.getRoomInfo()
     roomInfo.value = info
     console.log('Room info updated:', info)
+
+    if (info && info.users) {
+      const roomUsers: User[] = info.users.map((roomUser: Dty.RoomUser) => ({
+        id: roomUser.uid,
+        status: 'online',
+        appId: roomUser.appId,
+        publishers: roomUser.publishers,
+        streamDir: roomUser.streamDir,
+        streamId: roomUser.streamId,
+        subscribers: roomUser.subscribers,
+        type: roomUser.type,
+        uid: roomUser.uid
+      }))
+
+      users.value = [
+        { id: 'local', status: 'online' },
+        ...roomUsers
+      ]
+    }
   } catch (error) {
     console.error('Error fetching room info:', error)
   }
@@ -513,6 +543,24 @@ const stopHeartBeat = () => {
   flex-shrink: 0;
 }
 
+.local-avatar {
+  background: linear-gradient(135deg, #0e639c, #1177bb);
+  border: 2px solid #0e639c;
+}
+
+.remote-avatar {
+  background: linear-gradient(135deg, #4caf50, #66bb6a);
+  border: 2px solid #4caf50;
+}
+
+.local-user {
+  border-left: 3px solid #0e639c;
+}
+
+.remote-user {
+  border-left: 3px solid #4caf50;
+}
+
 .user-info {
   flex: 1;
   display: flex;
@@ -542,6 +590,20 @@ const stopHeartBeat = () => {
 
 .user-status.busy {
   color: #ffa500;
+}
+
+.user-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-stat {
+  font-size: 11px;
+  color: #888;
+  background-color: rgba(255, 255, 255, 0.05);
+  padding: 2px 6px;
+  border-radius: 3px;
 }
 
 .video-area {
