@@ -38,9 +38,119 @@
             <button class="control-btn" title="Share Screen">
               <span class="icon">🖥️</span>
             </button>
-            <button class="control-btn" title="Settings">
+            <button class="control-btn" title="Settings" @click="toggleSettings">
               <span class="icon">⚙️</span>
             </button>
+          </div>
+        </div>
+
+        <div v-if="showSettings" class="settings-panel">
+          <div class="settings-header">
+            <h2>WebRTC Settings</h2>
+            <button class="close-btn" @click="toggleSettings">✕</button>
+          </div>
+          <div class="settings-content">
+            <div class="settings-section">
+              <h3>Camera Settings</h3>
+              <div class="setting-item">
+                <label>Camera Device</label>
+                <select v-model="settings.cameraDevice">
+                  <option value="">Default Camera</option>
+                  <option value="front">Front Camera</option>
+                  <option value="back">Back Camera</option>
+                </select>
+              </div>
+              <div class="setting-item">
+                <label>Video Quality</label>
+                <select v-model="settings.videoQuality">
+                  <option value="720">720p HD</option>
+                  <option value="1080">1080p Full HD</option>
+                  <option value="480">480p SD</option>
+                </select>
+              </div>
+              <div class="setting-item">
+                <label>Frame Rate</label>
+                <select v-model="settings.frameRate">
+                  <option value="30">30 FPS</option>
+                  <option value="60">60 FPS</option>
+                  <option value="15">15 FPS</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3>Audio Settings</h3>
+              <div class="setting-item">
+                <label>Microphone Device</label>
+                <select v-model="settings.microphoneDevice">
+                  <option value="">Default Microphone</option>
+                  <option value="external">External Microphone</option>
+                  <option value="headset">Headset Microphone</option>
+                </select>
+              </div>
+              <div class="setting-item">
+                <label>Audio Quality</label>
+                <select v-model="settings.audioQuality">
+                  <option value="high">High</option>
+                  <option value="medium">Medium</option>
+                  <option value="low">Low</option>
+                </select>
+              </div>
+              <div class="setting-item">
+                <label>Noise Cancellation</label>
+                <div class="toggle-switch">
+                  <input type="checkbox" id="noiseCancellation" v-model="settings.noiseCancellation">
+                  <label for="noiseCancellation" class="switch"></label>
+                </div>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3>Connection Settings</h3>
+              <div class="setting-item">
+                <label>ICE Servers</label>
+                <select v-model="settings.iceServers">
+                  <option value="stun">STUN Only</option>
+                  <option value="turn">TURN Only</option>
+                  <option value="both">STUN + TURN</option>
+                </select>
+              </div>
+              <div class="setting-item">
+                <label>Bandwidth Limit</label>
+                <select v-model="settings.bandwidthLimit">
+                  <option value="unlimited">Unlimited</option>
+                  <option value="high">High (2 Mbps)</option>
+                  <option value="medium">Medium (1 Mbps)</option>
+                  <option value="low">Low (500 Kbps)</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="settings-section">
+              <h3>Advanced Settings</h3>
+              <div class="setting-item">
+                <label>Enable Debug Mode</label>
+                <div class="toggle-switch">
+                  <input type="checkbox" id="debugMode" v-model="settings.debugMode">
+                  <label for="debugMode" class="switch"></label>
+                </div>
+              </div>
+              <div class="setting-item">
+                <label>Auto-reconnect</label>
+                <div class="toggle-switch">
+                  <input type="checkbox" id="autoReconnect" v-model="settings.autoReconnect">
+                  <label for="autoReconnect" class="switch"></label>
+                </div>
+              </div>
+              <div class="setting-item">
+                <label>Connection Timeout (seconds)</label>
+                <input type="number" v-model="settings.connectionTimeout" min="5" max="60">
+              </div>
+            </div>
+          </div>
+          <div class="settings-footer">
+            <button class="btn btn-secondary" @click="resetSettings">Reset to Default</button>
+            <button class="btn btn-primary" @click="saveSettings">Save Settings</button>
           </div>
         </div>
 
@@ -83,8 +193,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onMounted, onUnmounted, reactive } from 'vue'
 import NavBar from '../NavBar.vue'
+import { createWebRTCCamera } from '@/utils/webrtc'
 
 interface User {
   id: string
@@ -94,6 +205,20 @@ interface User {
 
 interface RemoteUser extends User {
   videoStream?: MediaStream
+}
+
+interface WebRTCSettings {
+  cameraDevice: string
+  videoQuality: string
+  frameRate: string
+  microphoneDevice: string
+  audioQuality: string
+  noiseCancellation: boolean
+  iceServers: string
+  bandwidthLimit: string
+  debugMode: boolean
+  autoReconnect: boolean
+  connectionTimeout: number
 }
 
 const currentUser = ref<User>({
@@ -117,11 +242,54 @@ const remoteUsers = ref<RemoteUser[]>([
 
 const localVideoRef = ref<HTMLVideoElement | null>(null)
 const remoteVideoRefs = ref<Map<string, HTMLVideoElement>>(new Map())
+const showSettings = ref(false)
+const webrtcCamera = createWebRTCCamera()
+
+const settings = reactive<WebRTCSettings>({
+  cameraDevice: '',
+  videoQuality: '720',
+  frameRate: '30',
+  microphoneDevice: '',
+  audioQuality: 'high',
+  noiseCancellation: true,
+  iceServers: 'both',
+  bandwidthLimit: 'unlimited',
+  debugMode: false,
+  autoReconnect: true,
+  connectionTimeout: 30
+})
+
+const defaultSettings: WebRTCSettings = {
+  cameraDevice: '',
+  videoQuality: '720',
+  frameRate: '30',
+  microphoneDevice: '',
+  audioQuality: 'high',
+  noiseCancellation: true,
+  iceServers: 'both',
+  bandwidthLimit: 'unlimited',
+  debugMode: false,
+  autoReconnect: true,
+  connectionTimeout: 30
+}
 
 const setRemoteVideoRef = (el: HTMLVideoElement | null, userId: string) => {
   if (el) {
     remoteVideoRefs.value.set(userId, el)
   }
+}
+
+const toggleSettings = () => {
+  showSettings.value = !showSettings.value
+}
+
+const resetSettings = () => {
+  Object.assign(settings, defaultSettings)
+}
+
+const saveSettings = () => {
+  console.log('Settings saved:', settings)
+  showSettings.value = false
 }
 
 onMounted(() => {
@@ -134,12 +302,10 @@ onUnmounted(() => {
 
 const startLocalCamera = async () => {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video: {
-        width: { ideal: 1280 },
-        height: { ideal: 720 },
-        facingMode: 'user'
-      },
+    const stream = await webrtcCamera.startCamera({
+      width: 1280,
+      height: 720,
+      facingMode: 'user',
       audio: true
     })
 
@@ -152,9 +318,8 @@ const startLocalCamera = async () => {
 }
 
 const stopLocalCamera = () => {
-  if (localVideoRef.value && localVideoRef.value.srcObject) {
-    const stream = localVideoRef.value.srcObject as MediaStream
-    stream.getTracks().forEach((track) => track.stop())
+  webrtcCamera.stopCamera()
+  if (localVideoRef.value) {
     localVideoRef.value.srcObject = null
   }
 }
@@ -328,6 +493,193 @@ const stopLocalCamera = () => {
 
 .control-btn .icon {
   font-size: 18px;
+}
+
+.settings-panel {
+  background-color: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.settings-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid #3c3c3c;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.settings-header h2 {
+  font-size: 18px;
+  font-weight: 500;
+  margin: 0;
+  color: #ffffff;
+}
+
+.close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid #3c3c3c;
+  background-color: #3c3c3c;
+  color: #cccccc;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  font-size: 16px;
+}
+
+.close-btn:hover {
+  background-color: #4c4c4c;
+  border-color: #5c5c5c;
+  color: #ffffff;
+}
+
+.settings-content {
+  padding: 24px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 24px;
+}
+
+.settings-section {
+  background-color: #1e1e1e;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #3c3c3c;
+}
+
+.settings-section h3 {
+  font-size: 14px;
+  font-weight: 500;
+  margin: 0 0 16px;
+  color: #ffffff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.setting-item {
+  margin-bottom: 16px;
+}
+
+.setting-item:last-child {
+  margin-bottom: 0;
+}
+
+.setting-item label {
+  display: block;
+  font-size: 13px;
+  color: #cccccc;
+  margin-bottom: 8px;
+}
+
+.setting-item select,
+.setting-item input[type="number"] {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 4px;
+  border: 1px solid #3c3c3c;
+  background-color: #252526;
+  color: #ffffff;
+  font-size: 14px;
+  transition: border-color 0.15s;
+}
+
+.setting-item select:hover,
+.setting-item input[type="number"]:hover {
+  border-color: #0e639c;
+}
+
+.setting-item select:focus,
+.setting-item input[type="number"]:focus {
+  outline: none;
+  border-color: #0e639c;
+  box-shadow: 0 0 0 2px rgba(14, 99, 156, 0.2);
+}
+
+.setting-item select option {
+  background-color: #252526;
+  color: #ffffff;
+}
+
+.toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toggle-switch input[type="checkbox"] {
+  display: none;
+}
+
+.toggle-switch .switch {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background-color: #3c3c3c;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.toggle-switch .switch::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 20px;
+  height: 20px;
+  background-color: #ffffff;
+  border-radius: 50%;
+  transition: transform 0.15s;
+}
+
+.toggle-switch input[type="checkbox"]:checked + .switch {
+  background-color: #0e639c;
+}
+
+.toggle-switch input[type="checkbox"]:checked + .switch::before {
+  transform: translateX(20px);
+}
+
+.settings-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #3c3c3c;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  background-color: #252526;
+}
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-primary {
+  background-color: #0e639c;
+  color: #ffffff;
+}
+
+.btn-primary:hover {
+  background-color: #1177bb;
+}
+
+.btn-secondary {
+  background-color: #3c3c3c;
+  color: #ffffff;
+}
+
+.btn-secondary:hover {
+  background-color: #4c4c4c;
 }
 
 .video-grid {
