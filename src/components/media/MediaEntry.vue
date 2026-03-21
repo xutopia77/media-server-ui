@@ -38,6 +38,9 @@
             <button class="control-btn" title="Share Screen">
               <span class="icon">🖥️</span>
             </button>
+            <button class="control-btn" title="Publish Stream" @click="togglePublish">
+              <span class="icon">{{ isPublishing ? '🛑' : '📡' }}</span>
+            </button>
             <button class="control-btn" title="Settings" @click="toggleSettings">
               <span class="icon">⚙️</span>
             </button>
@@ -195,7 +198,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, reactive } from 'vue'
 import NavBar from '../NavBar.vue'
-import { createWebRTCCamera } from '@/utils/webrtc'
+import { createRtcApi } from '@/utils/RtcApi'
 
 interface User {
   id: string
@@ -243,7 +246,8 @@ const remoteUsers = ref<RemoteUser[]>([
 const localVideoRef = ref<HTMLVideoElement | null>(null)
 const remoteVideoRefs = ref<Map<string, HTMLVideoElement>>(new Map())
 const showSettings = ref(false)
-const webrtcCamera = createWebRTCCamera()
+const isPublishing = ref(false)
+const rtcApi = createRtcApi()
 
 const settings = reactive<WebRTCSettings>({
   cameraDevice: '',
@@ -297,12 +301,13 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  stopPublish()
   stopLocalCamera()
 })
 
 const startLocalCamera = async () => {
   try {
-    const stream = await webrtcCamera.startCamera({
+    const stream = await rtcApi.startCamera({
       width: 1280,
       height: 720,
       facingMode: 'user',
@@ -318,10 +323,48 @@ const startLocalCamera = async () => {
 }
 
 const stopLocalCamera = () => {
-  webrtcCamera.stopCamera()
+  rtcApi.stopCamera()
   if (localVideoRef.value) {
     localVideoRef.value.srcObject = null
   }
+}
+
+const togglePublish = async () => {
+  if (isPublishing.value) {
+    stopPublish()
+  } else {
+    await startPublish()
+  }
+}
+
+const startPublish = async () => {
+  try {
+    const stream = rtcApi.getStream()
+    if (!stream) {
+      console.error('No camera stream available')
+      alert('请先启动摄像头')
+      return
+    }
+
+    const sessionId = await rtcApi.startPublish(stream, {
+      streamurl: 'webrtc://domain/app/stream',
+      clientip: '127.0.0.1'
+    })
+
+    isPublishing.value = true
+    console.log('Publish started, Session ID:', sessionId)
+    alert('推流成功！Session ID: ' + sessionId)
+  } catch (error) {
+    console.error('Error starting publish:', error)
+    alert('推流失败: ' + (error as Error).message)
+  }
+}
+
+const stopPublish = () => {
+  rtcApi.stopPublish()
+  isPublishing.value = false
+  console.log('Publish stopped')
+  alert('推流已停止')
 }
 </script>
 
