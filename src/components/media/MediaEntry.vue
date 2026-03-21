@@ -18,7 +18,7 @@
               {{ user.id === 'local' ? 'L' : (user.streamId ? user.streamId.charAt(0) : 'R') }}
             </div>
             <div class="user-info">
-              <span class="user-name">{{ user.id === 'local' ? 'Local' : (user.streamId || user.uid) }}</span>
+              <span class="user-name">{{ user.streamId || user.uid || user.id }}</span>
               <div class="user-details">
                 <span class="user-status" :class="user.status">
                   {{ user.status }}
@@ -247,7 +247,17 @@ const currentUser = ref<User>({
 })
 
 const users = ref<User[]>([
-  { id: 'local', status: 'online' },
+  {
+    id: 'local',
+    status: 'online',
+    appId: 'local',
+    publishers: 0,
+    streamDir: 'Publish',
+    streamId: '',
+    subscribers: 0,
+    type: 'rtc',
+    uid: 'local'
+  },
 ])
 
 const remoteUsers = ref<RemoteUser[]>([
@@ -313,6 +323,7 @@ const saveSettings = () => {
 }
 
 onMounted(() => {
+  generateLocalStreamId()
   startLocalCamera()
   fetchRoomInfo()
   startRoomInfoPolling()
@@ -325,6 +336,17 @@ onUnmounted(() => {
   stopPublish()
   stopLocalCamera()
 })
+
+const generateLocalStreamId = () => {
+  const now = new Date()
+  const timestamp = now.getTime()
+  const streamId = `${timestamp}`
+  const localUser = users.value.find(u => u.id === 'local')
+  if (localUser) {
+    localUser.streamId = streamId
+    console.log('Generated local streamId:', streamId)
+  }
+}
 
 const startLocalCamera = async () => {
   try {
@@ -407,8 +429,19 @@ const fetchRoomInfo = async () => {
         uid: roomUser.uid
       }))
 
+      const localUser = users.value.find(u => u.id === 'local')
       users.value = [
-        { id: 'local', status: 'online' },
+        localUser || {
+          id: 'local',
+          status: 'online',
+          appId: 'local',
+          publishers: 0,
+          streamDir: 'Publish',
+          streamId: '',
+          subscribers: 0,
+          type: 'rtc',
+          uid: 'local'
+        },
         ...roomUsers
       ]
     }
