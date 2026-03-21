@@ -104,3 +104,54 @@ export interface PublishOptions {
   clientip?: string
   iceServers?: RTCIceServer[]
 }
+
+export interface RoomUser {
+  appId: string
+  publishers: number
+  streamDir: string
+  streamId: string
+  subscribers: number
+  type: string
+  uid: string
+}
+
+export interface RoomInfo {
+  users: RoomUser[]
+}
+
+export interface RoomResponse {
+  code: number
+  data: RoomInfo
+  desc: string
+  status: string
+}
+
+export interface HeartBeatInfo {
+  heartCnt: number
+  time: string
+  version: string
+}
+
+export interface GbInfo {
+  users: any[]
+}
+
+export interface RoomData {
+  users: RoomUser[]
+}
+
+export interface SysInfoData {
+  gb: GbInfo
+  heartBeatInfo: HeartBeatInfo
+  rooms: RoomData[]
+}
+
+export interface HeartBeatRequest {
+  cmd: string
+}
+
+export interface SysInfoResponse {
+  code: number
+  data: SysInfoData
+  status: string
+}

@@ -199,6 +199,7 @@
 import { ref, onMounted, onUnmounted, reactive } from 'vue'
 import NavBar from '../NavBar.vue'
 import { createRtcApi } from '@/utils/RtcApi'
+import * as Dty from '@/utils/dataTypedef'
 
 interface User {
   id: string
@@ -247,7 +248,11 @@ const localVideoRef = ref<HTMLVideoElement | null>(null)
 const remoteVideoRefs = ref<Map<string, HTMLVideoElement>>(new Map())
 const showSettings = ref(false)
 const isPublishing = ref(false)
+const roomInfo = ref<Dty.RoomInfo | null>(null)
+const sysInfo = ref<Dty.SysInfoData | null>(null)
 const rtcApi = createRtcApi()
+let roomInfoTimer: number | null = null
+let heartBeatTimer: number | null = null
 
 const settings = reactive<WebRTCSettings>({
   cameraDevice: '',
@@ -298,9 +303,14 @@ const saveSettings = () => {
 
 onMounted(() => {
   startLocalCamera()
+  fetchRoomInfo()
+  startRoomInfoPolling()
+  startHeartBeat()
 })
 
 onUnmounted(() => {
+  stopRoomInfoPolling()
+  stopHeartBeat()
   stopPublish()
   stopLocalCamera()
 })
@@ -365,6 +375,54 @@ const stopPublish = () => {
   isPublishing.value = false
   console.log('Publish stopped')
   alert('推流已停止')
+}
+
+const fetchRoomInfo = async () => {
+  try {
+    const info = await rtcApi.getRoomInfo()
+    roomInfo.value = info
+    console.log('Room info updated:', info)
+  } catch (error) {
+    console.error('Error fetching room info:', error)
+  }
+}
+
+const startRoomInfoPolling = () => {
+  fetchRoomInfo()
+  roomInfoTimer = window.setInterval(() => {
+    fetchRoomInfo()
+  }, 5000)
+}
+
+const stopRoomInfoPolling = () => {
+  if (roomInfoTimer !== null) {
+    clearInterval(roomInfoTimer)
+    roomInfoTimer = null
+  }
+}
+
+const sendHeartBeat = async () => {
+  try {
+    const info = await rtcApi.sendHeartBeat()
+    sysInfo.value = info
+    console.log('Heart beat sent:', info.heartBeatInfo)
+  } catch (error) {
+    console.error('Error sending heart beat:', error)
+  }
+}
+
+const startHeartBeat = () => {
+  sendHeartBeat()
+  heartBeatTimer = window.setInterval(() => {
+    sendHeartBeat()
+  }, 30000)
+}
+
+const stopHeartBeat = () => {
+  if (heartBeatTimer !== null) {
+    clearInterval(heartBeatTimer)
+    heartBeatTimer = null
+  }
 }
 </script>
 

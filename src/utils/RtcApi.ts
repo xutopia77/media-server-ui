@@ -154,6 +154,40 @@ export class RtcApi {
   getConnectionState(): RTCPeerConnectionState | undefined {
     return this.peerConnection?.connectionState
   }
+
+  async getRoomInfo(): Promise<Dty.RoomInfo> {
+    try {
+      const response = await axios.get<Dty.RoomResponse>('/api/v1/rtc/room')
+
+      if (response.data.code !== 0) {
+        throw new Error('Get room info failed')
+      }
+
+      return response.data.data
+    } catch (error) {
+      console.error('Error getting room info:', error)
+      throw error
+    }
+  }
+
+  async sendHeartBeat(): Promise<Dty.SysInfoData> {
+    try {
+      const request: Dty.HeartBeatRequest = {
+        cmd: 'heart_beat'
+      }
+
+      const response = await axios.post<Dty.SysInfoResponse>('/api/v1/sys_info', request)
+
+      if (response.data.code !== 200) {
+        throw new Error('Heart beat failed')
+      }
+
+      return response.data.data
+    } catch (error) {
+      console.error('Error sending heart beat:', error)
+      throw error
+    }
+  }
 }
 
 export const createRtcApi = (): RtcApi => {
