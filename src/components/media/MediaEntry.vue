@@ -389,8 +389,15 @@ const startPublish = async () => {
       return
     }
 
+    const localUser = users.value.find(u => u.id === 'local')
+    if (!localUser || !localUser.streamId) {
+      console.error('No local streamId available')
+      alert('本地 streamId 不可用')
+      return
+    }
+
     const sessionId = await rtcApi.startPublish(stream, {
-      streamurl: 'webrtc://domain/app/stream',
+      streamurl: `webrtc://localhost/2001/${localUser.streamId}`,
       clientip: '127.0.0.1'
     })
 
