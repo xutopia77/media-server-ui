@@ -94,11 +94,9 @@ export interface PublishRequest {
 
 export interface PublishResponse {
   code: number
-  msg: string
-  data: {
-    sdp: string
-    sessionid: string
-  }
+  sdp: string
+  sessionid: string
+  server: string
 }
 
 export interface PublishOptions {

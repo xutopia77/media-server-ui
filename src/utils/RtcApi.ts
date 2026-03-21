@@ -110,16 +110,16 @@ export class RtcApi {
       const response = await axios.post<Dty.PublishResponse>('/api/v1/rtc/publish', request)
 
       if (response.data.code !== 0) {
-        throw new Error(response.data.msg || 'Publish failed')
+        throw new Error('Publish failed')
       }
 
       const answer = new RTCSessionDescription({
         type: 'answer',
-        sdp: response.data.data.sdp
+        sdp: response.data.sdp
       })
 
       await this.peerConnection.setRemoteDescription(answer)
-      this.sessionId = response.data.data.sessionid
+      this.sessionId = response.data.sessionid
 
       return this.sessionId
     } catch (error) {
