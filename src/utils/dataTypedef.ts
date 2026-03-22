@@ -105,6 +105,36 @@ export interface PublishOptions {
   iceServers?: RTCIceServer[]
 }
 
+export interface PlayRequest {
+  streamurl: string
+  sdp: string
+  clientip?: string
+}
+
+export interface PlayResponse {
+  code: number
+  server: string
+  sdp: string
+  sessionid: string
+}
+
+export interface PlayOptions {
+  streamurl: string
+  clientip?: string
+  iceServers?: RTCIceServer[]
+}
+
+export interface RunCmdRequest {
+  cmd: string
+  data?: string
+}
+
+export interface RunCmdResponse {
+  code: number
+  msg?: string
+  data?: any
+}
+
 export interface RoomUser {
   appId: string
   publishers: number

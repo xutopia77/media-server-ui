@@ -6,6 +6,9 @@ export class RtcApi {
   private stream: MediaStream | null = null
   private sessionId: string | null = null
   private streamurl: string = ''
+  private playPeerConnection: RTCPeerConnection | null = null
+  private playStream: MediaStream | null = null
+  private playSessionId: string | null = null
 
   async startCamera(options: Dty.CameraOptions = {}): Promise<MediaStream> {
     const defaultOptions: Dty.CameraOptions = {
@@ -185,6 +188,199 @@ export class RtcApi {
       return response.data.data
     } catch (error) {
       console.error('Error sending heart beat:', error)
+      throw error
+    }
+  }
+
+  async startPlay(options: Dty.PlayOptions): Promise<MediaStream> {
+    console.log('=== startPlay 开始 ===')
+    console.log('Play options:', options)
+
+    const iceServers = options.iceServers || [
+      { urls: 'stun:stun.l.google.com:19302' }
+    ]
+    console.log('ICE servers:', iceServers)
+
+    // this.playPeerConnection = new RTCPeerConnection({ iceServers })
+    this.playPeerConnection = new RTCPeerConnection()
+    console.log('创建 playPeerConnection 成功')
+
+    // 添加媒体收发器（recvonly）- 拉流场景
+    // 注意：添加顺序为 audio、video，SDP 的 m 线顺序遵循此顺序
+    this.playPeerConnection.addTransceiver('audio', { direction: 'recvonly' })
+    this.playPeerConnection.addTransceiver('video', { direction: 'recvonly' })
+    console.log('添加媒体收发器成功（audio + video recvonly）')
+
+    this.playPeerConnection.ontrack = (event) => {
+      console.log('Received track:', event.track.kind)
+      if (event.streams && event.streams[0]) {
+        this.playStream = event.streams[0]
+        console.log('设置 playStream 成功')
+      }
+    }
+
+    this.playPeerConnection.onicecandidate = (event) => {
+      console.log('ICE candidate:', event.candidate ? 'candidate received' : 'null (gathering complete)')
+      if (event.candidate === null) {
+        console.log('ICE gathering complete for play')
+      }
+    }
+
+    this.playPeerConnection.onconnectionstatechange = () => {
+      console.log('Play connection state:', this.playPeerConnection?.connectionState)
+    }
+
+    console.log('开始创建 offer...')
+    const offer = await this.playPeerConnection.createOffer()
+    console.log('Offer 创建成功')
+
+    console.log('设置本地描述...')
+    await this.playPeerConnection.setLocalDescription(offer)
+    console.log('本地描述设置成功')
+
+    const request: Dty.PlayRequest = {
+      streamurl: options.streamurl,
+      sdp: this.playPeerConnection.localDescription?.sdp || '',
+      clientip: options.clientip
+    }
+    console.log('准备发送请求到 /api/v1/rtc/play')
+    console.log('Request streamurl:', request.streamurl)
+    console.log('Request SDP length:', request.sdp.length)
+    console.log('Request clientip:', request.clientip)
+
+    try {
+      console.log('开始发送 axios.post 请求...')
+      const response = await axios.post<Dty.PlayResponse>('/api/v1/rtc/play', request)
+      console.log('axios.post 请求成功')
+      console.log('Response status:', response.status)
+      console.log('Response data:', response.data)
+
+      if (response.data.code !== 0) {
+        console.error('响应 code 不为 0:', response.data.code)
+        console.error('Response server:', response.data.server)
+        throw new Error('Play failed')
+      }
+
+      console.log('开始设置远程描述...')
+      const answer = new RTCSessionDescription({
+        type: 'answer',
+        sdp: response.data.sdp
+      })
+      console.log('Answer SDP 创建成功')
+
+      await this.playPeerConnection.setRemoteDescription(answer)
+      console.log('远程描述设置成功')
+      this.playSessionId = response.data.sessionid
+      console.log('Play session ID:', this.playSessionId)
+
+      console.log('=== startPlay 成功完成 ===')
+      return this.playStream!
+    } catch (error) {
+      console.error('=== startPlay 出错 ===')
+      console.error('错误详情:', error)
+      if (axios.isAxiosError(error)) {
+        console.error('Axios 错误')
+        console.error('请求 URL:', error.config?.url)
+        console.error('请求方法:', error.config?.method)
+        console.error('请求数据:', error.config?.data)
+        console.error('响应状态:', error.response?.status)
+        console.error('响应数据:', error.response?.data)
+        console.error('响应头:', error.response?.headers)
+      } else if (error instanceof Error) {
+        console.error('Error 名称:', error.name)
+        console.error('Error 消息:', error.message)
+        console.error('Error 堆栈:', error.stack)
+      }
+      console.error('停止 play...')
+      this.stopPlay()
+      throw error
+    }
+  }
+
+  stopPlay(): void {
+    if (this.playPeerConnection) {
+      this.playPeerConnection.close()
+      this.playPeerConnection = null
+    }
+
+    this.playStream = null
+    this.playSessionId = null
+  }
+
+  getPlayStream(): MediaStream | null {
+    return this.playStream
+  }
+
+  getPlaySessionId(): string | null {
+    return this.playSessionId
+  }
+
+  getPlayConnectionState(): RTCPeerConnectionState | undefined {
+    return this.playPeerConnection?.connectionState
+  }
+
+  async startFfmpegPublish(): Promise<Dty.RunCmdResponse> {
+    try {
+      const request: Dty.RunCmdRequest = {
+        cmd: 'ffmpeg_publish'
+      }
+      const response = await axios.post<Dty.RunCmdResponse>('/api/v1/run_cmd', request)
+      return response.data
+    } catch (error) {
+      console.error('Error starting ffmpeg publish:', error)
+      throw error
+    }
+  }
+
+  async startRtmpPublish(): Promise<Dty.RunCmdResponse> {
+    try {
+      const request: Dty.RunCmdRequest = {
+        cmd: 'rtmp_publish'
+      }
+      const response = await axios.post<Dty.RunCmdResponse>('/api/v1/run_cmd', request)
+      return response.data
+    } catch (error) {
+      console.error('Error starting rtmp publish:', error)
+      throw error
+    }
+  }
+
+  async startRtmpPlay(userId: string): Promise<Dty.RunCmdResponse> {
+    try {
+      const request: Dty.RunCmdRequest = {
+        cmd: 'rtmp_play',
+        data: userId
+      }
+      const response = await axios.post<Dty.RunCmdResponse>('/api/v1/run_cmd', request)
+      return response.data
+    } catch (error) {
+      console.error('Error starting rtmp play:', error)
+      throw error
+    }
+  }
+
+  async startFilePlay(): Promise<Dty.RunCmdResponse> {
+    try {
+      const request: Dty.RunCmdRequest = {
+        cmd: 'file_play'
+      }
+      const response = await axios.post<Dty.RunCmdResponse>('/api/v1/run_cmd', request)
+      return response.data
+    } catch (error) {
+      console.error('Error starting file play:', error)
+      throw error
+    }
+  }
+
+  async stopFilePlay(): Promise<Dty.RunCmdResponse> {
+    try {
+      const request: Dty.RunCmdRequest = {
+        cmd: 'file_play_stop'
+      }
+      const response = await axios.post<Dty.RunCmdResponse>('/api/v1/run_cmd', request)
+      return response.data
+    } catch (error) {
+      console.error('Error stopping file play:', error)
       throw error
     }
   }

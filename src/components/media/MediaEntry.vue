@@ -29,6 +29,14 @@
                 <span v-if="user.subscribers !== undefined" class="user-stat">
                   👥 {{ user.subscribers }}
                 </span>
+                <button
+                  v-if="user.id !== 'local'"
+                  class="call-btn"
+                  @click="callUser(user)"
+                  :disabled="isCallingUser(user.id)"
+                >
+                  {{ isCallingUser(user.id) ? 'Calling...' : 'Call' }}
+                </button>
               </div>
             </div>
           </div>
@@ -265,6 +273,8 @@ const remoteUsers = ref<RemoteUser[]>([
   { id: 'user2', status: 'online' },
 ])
 
+const callingUsers = ref<Set<string>>(new Set())
+
 const localVideoRef = ref<HTMLVideoElement | null>(null)
 const remoteVideoRefs = ref<Map<string, HTMLVideoElement>>(new Map())
 const showSettings = ref(false)
@@ -494,6 +504,84 @@ const stopHeartBeat = () => {
     heartBeatTimer = null
   }
 }
+
+const callUser = async (user: User) => {
+  console.log('=== callUser 开始 ===')
+  console.log('用户信息:', user)
+  
+  try {
+    if (!user.streamId) {
+      console.error('错误：用户没有 streamId')
+      alert('用户没有 streamId')
+      return
+    }
+
+    console.log('streamId 存在:', user.streamId)
+    callingUsers.value.add(user.id)
+    console.log('已添加到 callingUsers:', user.id)
+
+    const streamurl = `webrtc://localhost/2001/${user.streamId}`
+    console.log('准备拉流，streamurl:', streamurl)
+
+    const existingRemoteUser = remoteUsers.value.find(u => u.id === user.id)
+    if (existingRemoteUser) {
+      console.log('更新现有远程用户:', user.id)
+    } else {
+      console.log('添加新远程用户:', user.id)
+      remoteUsers.value.push({
+        id: user.id,
+        status: user.status,
+        videoStream: undefined
+      })
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 100))
+
+    const stream = await rtcApi.startPlay({
+      streamurl: streamurl,
+      clientip: '127.0.0.1'
+    })
+
+    console.log('startPlay 成功，获取到流:', stream)
+
+    const updatedRemoteUser = remoteUsers.value.find(u => u.id === user.id)
+    if (updatedRemoteUser) {
+      updatedRemoteUser.videoStream = stream
+    }
+
+    const videoElement = remoteVideoRefs.value.get(user.id)
+    console.log('查找 video 元素，userId:', user.id, 'videoElement:', videoElement)
+    if (videoElement) {
+      videoElement.srcObject = stream
+      console.log('已设置 video srcObject')
+    } else {
+      console.warn('未找到对应的 video 元素')
+    }
+
+    callingUsers.value.delete(user.id)
+    console.log('已从 callingUsers 移除:', user.id)
+    console.log('=== callUser 成功完成 ===')
+    alert('拉流成功！')
+  } catch (error) {
+    console.error('=== callUser 出错 ===')
+    console.error('错误详情:', error)
+    console.error('错误类型:', error instanceof Error ? error.name : typeof error)
+    console.error('错误消息:', error instanceof Error ? error.message : String(error))
+    callingUsers.value.delete(user.id)
+    console.log('已从 callingUsers 移除:', user.id)
+    
+    const errorRemoteUser = remoteUsers.value.find(u => u.id === user.id)
+    if (errorRemoteUser && !errorRemoteUser.videoStream) {
+      remoteUsers.value = remoteUsers.value.filter(u => u.id !== user.id)
+    }
+    
+    alert('拉流失败: ' + (error as Error).message)
+  }
+}
+
+const isCallingUser = (userId: string): boolean => {
+  return callingUsers.value.has(userId)
+}
 </script>
 
 <style scoped>
@@ -644,6 +732,28 @@ const stopHeartBeat = () => {
   background-color: rgba(255, 255, 255, 0.05);
   padding: 2px 6px;
   border-radius: 3px;
+}
+
+.call-btn {
+  font-size: 11px;
+  padding: 4px 10px;
+  border: 1px solid #0e639c;
+  background-color: #0e639c;
+  color: #ffffff;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+
+.call-btn:hover:not(:disabled) {
+  background-color: #1177bb;
+  border-color: #1177bb;
+}
+
+.call-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .video-area {
