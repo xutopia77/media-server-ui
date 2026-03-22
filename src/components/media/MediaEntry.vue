@@ -148,24 +148,23 @@
             </div>
 
             <div class="settings-section">
-              <h3>Advanced Settings</h3>
-              <div class="setting-item">
-                <label>Enable Debug Mode</label>
-                <div class="toggle-switch">
-                  <input type="checkbox" id="debugMode" v-model="settings.debugMode">
-                  <label for="debugMode" class="switch"></label>
-                </div>
-              </div>
-              <div class="setting-item">
-                <label>Auto-reconnect</label>
-                <div class="toggle-switch">
-                  <input type="checkbox" id="autoReconnect" v-model="settings.autoReconnect">
-                  <label for="autoReconnect" class="switch"></label>
-                </div>
-              </div>
-              <div class="setting-item">
-                <label>Connection Timeout (seconds)</label>
-                <input type="number" v-model="settings.connectionTimeout" min="5" max="60">
+              <h3>Backend Commands</h3>
+              <div class="command-buttons">
+                <button class="btn btn-command" @click="handleFfmpegPublish" :disabled="isCommandLoading">
+                  {{ isCommandLoading ? 'Processing...' : 'FFmpeg Publish' }}
+                </button>
+                <button class="btn btn-command" @click="handleRtmpPublish" :disabled="isCommandLoading">
+                  {{ isCommandLoading ? 'Processing...' : 'RTMP Publish' }}
+                </button>
+                <button class="btn btn-command" @click="handleRtmpPlay" :disabled="isCommandLoading">
+                  {{ isCommandLoading ? 'Processing...' : 'RTMP Play' }}
+                </button>
+                <button class="btn btn-command" @click="handleFilePlay" :disabled="isCommandLoading">
+                  {{ isCommandLoading ? 'Processing...' : 'File Play' }}
+                </button>
+                <button class="btn btn-command btn-danger" @click="handleFilePlayStop" :disabled="isCommandLoading">
+                  {{ isCommandLoading ? 'Processing...' : 'File Play Stop' }}
+                </button>
               </div>
             </div>
           </div>
@@ -244,9 +243,6 @@ interface WebRTCSettings {
   noiseCancellation: boolean
   iceServers: string
   bandwidthLimit: string
-  debugMode: boolean
-  autoReconnect: boolean
-  connectionTimeout: number
 }
 
 const currentUser = ref<User>({
@@ -293,10 +289,7 @@ const settings = reactive<WebRTCSettings>({
   audioQuality: 'high',
   noiseCancellation: true,
   iceServers: 'both',
-  bandwidthLimit: 'unlimited',
-  debugMode: false,
-  autoReconnect: true,
-  connectionTimeout: 30
+  bandwidthLimit: 'unlimited'
 })
 
 const defaultSettings: WebRTCSettings = {
@@ -307,10 +300,7 @@ const defaultSettings: WebRTCSettings = {
   audioQuality: 'high',
   noiseCancellation: true,
   iceServers: 'both',
-  bandwidthLimit: 'unlimited',
-  debugMode: false,
-  autoReconnect: true,
-  connectionTimeout: 30
+  bandwidthLimit: 'unlimited'
 }
 
 const setRemoteVideoRef = (el: HTMLVideoElement | null, userId: string) => {
@@ -395,14 +385,14 @@ const startPublish = async () => {
     const stream = rtcApi.getStream()
     if (!stream) {
       console.error('No camera stream available')
-      alert('请先启动摄像头')
+      alert('Please start camera first')
       return
     }
 
     const localUser = users.value.find(u => u.id === 'local')
     if (!localUser || !localUser.streamId) {
       console.error('No local streamId available')
-      alert('本地 streamId 不可用')
+      alert('Local streamId is not available')
       return
     }
 
@@ -413,10 +403,10 @@ const startPublish = async () => {
 
     isPublishing.value = true
     console.log('Publish started, Session ID:', sessionId)
-    alert('推流成功！Session ID: ' + sessionId)
+    alert('Publish successful! Session ID: ' + sessionId)
   } catch (error) {
     console.error('Error starting publish:', error)
-    alert('推流失败: ' + (error as Error).message)
+    alert('Publish failed: ' + (error as Error).message)
   }
 }
 
@@ -424,7 +414,7 @@ const stopPublish = () => {
   rtcApi.stopPublish()
   isPublishing.value = false
   console.log('Publish stopped')
-  alert('推流已停止')
+  alert('Publish stopped')
 }
 
 const fetchRoomInfo = async () => {
@@ -506,28 +496,28 @@ const stopHeartBeat = () => {
 }
 
 const callUser = async (user: User) => {
-  console.log('=== callUser 开始 ===')
-  console.log('用户信息:', user)
+  console.log('=== callUser start ===')
+  console.log('User info:', user)
   
   try {
     if (!user.streamId) {
-      console.error('错误：用户没有 streamId')
-      alert('用户没有 streamId')
+      console.error('Error: User has no streamId')
+      alert('User has no streamId')
       return
     }
 
-    console.log('streamId 存在:', user.streamId)
+    console.log('streamId exists:', user.streamId)
     callingUsers.value.add(user.id)
-    console.log('已添加到 callingUsers:', user.id)
+    console.log('Added to callingUsers:', user.id)
 
     const streamurl = `webrtc://localhost/2001/${user.streamId}`
-    console.log('准备拉流，streamurl:', streamurl)
+    console.log('Preparing to play, streamurl:', streamurl)
 
     const existingRemoteUser = remoteUsers.value.find(u => u.id === user.id)
     if (existingRemoteUser) {
-      console.log('更新现有远程用户:', user.id)
+      console.log('Update existing remote user:', user.id)
     } else {
-      console.log('添加新远程用户:', user.id)
+      console.log('Add new remote user:', user.id)
       remoteUsers.value.push({
         id: user.id,
         status: user.status,
@@ -542,7 +532,7 @@ const callUser = async (user: User) => {
       clientip: '127.0.0.1'
     })
 
-    console.log('startPlay 成功，获取到流:', stream)
+    console.log('startPlay successful, got stream:', stream)
 
     const updatedRemoteUser = remoteUsers.value.find(u => u.id === user.id)
     if (updatedRemoteUser) {
@@ -550,37 +540,116 @@ const callUser = async (user: User) => {
     }
 
     const videoElement = remoteVideoRefs.value.get(user.id)
-    console.log('查找 video 元素，userId:', user.id, 'videoElement:', videoElement)
+    console.log('Find video element, userId:', user.id, 'videoElement:', videoElement)
     if (videoElement) {
       videoElement.srcObject = stream
-      console.log('已设置 video srcObject')
+      console.log('Set video srcObject')
     } else {
-      console.warn('未找到对应的 video 元素')
+      console.warn('Video element not found')
     }
 
     callingUsers.value.delete(user.id)
-    console.log('已从 callingUsers 移除:', user.id)
-    console.log('=== callUser 成功完成 ===')
-    alert('拉流成功！')
+    console.log('Removed from callingUsers:', user.id)
+    console.log('=== callUser completed ===')
+    alert('Play successful!')
   } catch (error) {
-    console.error('=== callUser 出错 ===')
-    console.error('错误详情:', error)
-    console.error('错误类型:', error instanceof Error ? error.name : typeof error)
-    console.error('错误消息:', error instanceof Error ? error.message : String(error))
+    console.error('=== callUser error ===')
+    console.error('Error details:', error)
+    console.error('Error type:', error instanceof Error ? error.name : typeof error)
+    console.error('Error message:', error instanceof Error ? error.message : String(error))
     callingUsers.value.delete(user.id)
-    console.log('已从 callingUsers 移除:', user.id)
+    console.log('Removed from callingUsers:', user.id)
     
     const errorRemoteUser = remoteUsers.value.find(u => u.id === user.id)
     if (errorRemoteUser && !errorRemoteUser.videoStream) {
       remoteUsers.value = remoteUsers.value.filter(u => u.id !== user.id)
     }
     
-    alert('拉流失败: ' + (error as Error).message)
+    alert('Play failed: ' + (error as Error).message)
   }
 }
 
 const isCallingUser = (userId: string): boolean => {
   return callingUsers.value.has(userId)
+}
+
+const isCommandLoading = ref(false)
+
+const handleFfmpegPublish = async () => {
+  try {
+    isCommandLoading.value = true
+    console.log('Starting ffmpeg publish...')
+    const response = await rtcApi.startFfmpegPublish()
+    console.log('FFmpeg publish response:', response)
+    alert('FFmpeg publish successful!')
+  } catch (error) {
+    console.error('Error starting ffmpeg publish:', error)
+    alert('FFmpeg publish failed: ' + (error as Error).message)
+  } finally {
+    isCommandLoading.value = false
+  }
+}
+
+const handleRtmpPublish = async () => {
+  try {
+    isCommandLoading.value = true
+    console.log('Starting rtmp publish...')
+    const response = await rtcApi.startRtmpPublish()
+    console.log('RTMP publish response:', response)
+    alert('RTMP publish successful!')
+  } catch (error) {
+    console.error('Error starting rtmp publish:', error)
+    alert('RTMP publish failed: ' + (error as Error).message)
+  } finally {
+    isCommandLoading.value = false
+  }
+}
+
+const handleRtmpPlay = async () => {
+  try {
+    isCommandLoading.value = true
+    console.log('Starting rtmp play...')
+    const localUser = users.value.find(u => u.id === 'local')
+    const userId = localUser?.streamId || 'default'
+    const response = await rtcApi.startRtmpPlay(userId)
+    console.log('RTMP play response:', response)
+    alert('RTMP play successful!')
+  } catch (error) {
+    console.error('Error starting rtmp play:', error)
+    alert('RTMP play failed: ' + (error as Error).message)
+  } finally {
+    isCommandLoading.value = false
+  }
+}
+
+const handleFilePlay = async () => {
+  try {
+    isCommandLoading.value = true
+    console.log('Starting file play...')
+    const response = await rtcApi.startFilePlay()
+    console.log('File play response:', response)
+    alert('File play successful!')
+  } catch (error) {
+    console.error('Error starting file play:', error)
+    alert('File play failed: ' + (error as Error).message)
+  } finally {
+    isCommandLoading.value = false
+  }
+}
+
+const handleFilePlayStop = async () => {
+  try {
+    isCommandLoading.value = true
+    console.log('Stopping file play...')
+    const response = await rtcApi.stopFilePlay()
+    console.log('File play stop response:', response)
+    alert('File play stopped successfully!')
+  } catch (error) {
+    console.error('Error stopping file play:', error)
+    alert('File play stop failed: ' + (error as Error).message)
+  } finally {
+    isCommandLoading.value = false
+  }
 }
 </script>
 
@@ -989,6 +1058,48 @@ const isCallingUser = (userId: string): boolean => {
 .btn-secondary {
   background-color: #3c3c3c;
   color: #ffffff;
+}
+
+.btn-secondary:hover {
+  background-color: #4c4c4c;
+}
+
+.btn-command {
+  width: 100%;
+  padding: 10px 16px;
+  margin-bottom: 8px;
+  background-color: #0e639c;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-command:hover:not(:disabled) {
+  background-color: #1177bb;
+}
+
+.btn-command:disabled {
+  background-color: #3c3c3c;
+  color: #888;
+  cursor: not-allowed;
+}
+
+.btn-command.btn-danger {
+  background-color: #d32f2f;
+}
+
+.btn-command.btn-danger:hover:not(:disabled) {
+  background-color: #f44336;
+}
+
+.command-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .btn-secondary:hover {

@@ -132,7 +132,6 @@ export interface RunCmdRequest {
 export interface RunCmdResponse {
   code: number
   msg?: string
-  data?: any
 }
 
 export interface RoomUser {
