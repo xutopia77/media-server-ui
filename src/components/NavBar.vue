@@ -32,7 +32,7 @@ const route = useRoute()
 
 const SSE_URL = import.meta.env.VITE_SSE_URL || '/api/v1/sse/events'
 
-const { status, lastHeartbeat, connect } = useSSE({
+const { status,  connect } = useSSE({
   url: SSE_URL,
   reconnectInterval: 3000,
   maxReconnectAttempts: 10,

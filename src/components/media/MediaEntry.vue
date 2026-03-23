@@ -666,8 +666,8 @@ const handleFilePlayStop = async () => {
 
 .video-chat-container {
   display: flex;
-  height: calc(100vh - 60px);
-  overflow: hidden;
+  min-height: calc(100vh - 60px);
+  overflow-y: auto;
 }
 
 .user-sidebar {
@@ -832,7 +832,7 @@ const handleFilePlayStop = async () => {
   flex: 1;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow-y: auto;
 }
 
 .video-header {
@@ -883,8 +883,7 @@ const handleFilePlayStop = async () => {
 .settings-panel {
   background-color: #252526;
   border-bottom: 1px solid #3c3c3c;
-  max-height: 400px;
-  overflow-y: auto;
+  overflow-y: hidden;
 }
 
 .settings-header {
@@ -1115,7 +1114,7 @@ const handleFilePlayStop = async () => {
   grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
   gap: 16px;
   padding: 24px;
-  overflow-y: auto;
+  overflow-y: hidden;
   align-content: start;
 }
 
