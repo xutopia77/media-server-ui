@@ -54,6 +54,10 @@
 import { ref, computed } from 'vue'
 import { useToast } from '@/composables/useToast'
 
+defineOptions({
+  name: 'ToastNotification'
+})
+
 const { toasts, dismissToast, clearAll, getToastIcon, formatTime } = useToast()
 
 const isPanelOpen = ref(false)
