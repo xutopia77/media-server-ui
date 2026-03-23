@@ -193,7 +193,7 @@ export class RtcApi {
   }
 
   async startPlay(options: Dty.PlayOptions): Promise<MediaStream> {
-    console.log('=== startPlay 开始 ===')
+    console.log('=== startPlay start ===')
     console.log('Play options:', options)
 
     const iceServers = options.iceServers || [
@@ -203,19 +203,19 @@ export class RtcApi {
 
     // this.playPeerConnection = new RTCPeerConnection({ iceServers })
     this.playPeerConnection = new RTCPeerConnection()
-    console.log('创建 playPeerConnection 成功')
+    console.log('Created playPeerConnection successfully')
 
-    // 添加媒体收发器（recvonly）- 拉流场景
-    // 注意：添加顺序为 audio、video，SDP 的 m 线顺序遵循此顺序
+    // Add media transceivers (recvonly) - play scenario
+    // Note: Add order is audio, video, SDP m-line order follows this order
     this.playPeerConnection.addTransceiver('audio', { direction: 'recvonly' })
     this.playPeerConnection.addTransceiver('video', { direction: 'recvonly' })
-    console.log('添加媒体收发器成功（audio + video recvonly）')
+    console.log('Added media transceivers successfully (audio + video recvonly)')
 
     this.playPeerConnection.ontrack = (event) => {
       console.log('Received track:', event.track.kind)
       if (event.streams && event.streams[0]) {
         this.playStream = event.streams[0]
-        console.log('设置 playStream 成功')
+        console.log('Set playStream successfully')
       }
     }
 
@@ -230,68 +230,68 @@ export class RtcApi {
       console.log('Play connection state:', this.playPeerConnection?.connectionState)
     }
 
-    console.log('开始创建 offer...')
+    console.log('Start creating offer...')
     const offer = await this.playPeerConnection.createOffer()
-    console.log('Offer 创建成功')
+    console.log('Offer created successfully')
 
-    console.log('设置本地描述...')
+    console.log('Set local description...')
     await this.playPeerConnection.setLocalDescription(offer)
-    console.log('本地描述设置成功')
+    console.log('Local description set successfully')
 
     const request: Dty.PlayRequest = {
       streamurl: options.streamurl,
       sdp: this.playPeerConnection.localDescription?.sdp || '',
       clientip: options.clientip
     }
-    console.log('准备发送请求到 /api/v1/rtc/play')
+    console.log('Prepare to send request to /api/v1/rtc/play')
     console.log('Request streamurl:', request.streamurl)
     console.log('Request SDP length:', request.sdp.length)
     console.log('Request clientip:', request.clientip)
 
     try {
-      console.log('开始发送 axios.post 请求...')
+      console.log('Start sending axios.post request...')
       const response = await axios.post<Dty.PlayResponse>('/api/v1/rtc/play', request)
-      console.log('axios.post 请求成功')
+      console.log('axios.post request successful')
       console.log('Response status:', response.status)
       console.log('Response data:', response.data)
 
       if (response.data.code !== 0) {
-        console.error('响应 code 不为 0:', response.data.code)
+        console.error('Response code is not 0:', response.data.code)
         console.error('Response server:', response.data.server)
         throw new Error('Play failed')
       }
 
-      console.log('开始设置远程描述...')
+      console.log('Start setting remote description...')
       const answer = new RTCSessionDescription({
         type: 'answer',
         sdp: response.data.sdp
       })
-      console.log('Answer SDP 创建成功')
+      console.log('Answer SDP created successfully')
 
       await this.playPeerConnection.setRemoteDescription(answer)
-      console.log('远程描述设置成功')
+      console.log('Remote description set successfully')
       this.playSessionId = response.data.sessionid
       console.log('Play session ID:', this.playSessionId)
 
-      console.log('=== startPlay 成功完成 ===')
+      console.log('=== startPlay completed ===')
       return this.playStream!
     } catch (error) {
-      console.error('=== startPlay 出错 ===')
-      console.error('错误详情:', error)
+      console.error('=== startPlay error ===')
+      console.error('Error details:', error)
       if (axios.isAxiosError(error)) {
-        console.error('Axios 错误')
-        console.error('请求 URL:', error.config?.url)
-        console.error('请求方法:', error.config?.method)
-        console.error('请求数据:', error.config?.data)
-        console.error('响应状态:', error.response?.status)
-        console.error('响应数据:', error.response?.data)
-        console.error('响应头:', error.response?.headers)
+        console.error('Axios error')
+        console.error('Request URL:', error.config?.url)
+        console.error('Request method:', error.config?.method)
+        console.error('Request data:', error.config?.data)
+        console.error('Response status:', error.response?.status)
+        console.error('Response data:', error.response?.data)
+        console.error('Response headers:', error.response?.headers)
       } else if (error instanceof Error) {
-        console.error('Error 名称:', error.name)
-        console.error('Error 消息:', error.message)
-        console.error('Error 堆栈:', error.stack)
+        console.error('Error name:', error.name)
+        console.error('Error message:', error.message)
+        console.error('Error stack:', error.stack)
       }
-      console.error('停止 play...')
+      console.error('Stop play...')
       this.stopPlay()
       throw error
     }
