@@ -217,6 +217,9 @@ import { ref, onMounted, onUnmounted, reactive } from 'vue'
 import NavBar from '../NavBar.vue'
 import { createRtcApi } from '@/utils/RtcApi'
 import * as Dty from '@/utils/dataTypedef'
+import { useToast } from '@/composables/useToast'
+
+const { showToast } = useToast()
 
 interface User {
   id: string
@@ -385,14 +388,14 @@ const startPublish = async () => {
     const stream = rtcApi.getStream()
     if (!stream) {
       console.error('No camera stream available')
-      alert('Please start camera first')
+      showToast('Please start camera first', 'warning')
       return
     }
 
     const localUser = users.value.find(u => u.id === 'local')
     if (!localUser || !localUser.streamId) {
       console.error('No local streamId available')
-      alert('Local streamId is not available')
+      showToast('Local streamId is not available', 'warning')
       return
     }
 
@@ -403,10 +406,10 @@ const startPublish = async () => {
 
     isPublishing.value = true
     console.log('Publish started, Session ID:', sessionId)
-    alert('Publish successful! Session ID: ' + sessionId)
+    showToast('Publish successful! Session ID: ' + sessionId, 'success')
   } catch (error) {
     console.error('Error starting publish:', error)
-    alert('Publish failed: ' + (error as Error).message)
+    showToast('Publish failed: ' + (error as Error).message, 'error')
   }
 }
 
@@ -414,7 +417,7 @@ const stopPublish = () => {
   rtcApi.stopPublish()
   isPublishing.value = false
   console.log('Publish stopped')
-  alert('Publish stopped')
+  showToast('Publish stopped', 'info')
 }
 
 const fetchRoomInfo = async () => {
@@ -502,7 +505,7 @@ const callUser = async (user: User) => {
   try {
     if (!user.streamId) {
       console.error('Error: User has no streamId')
-      alert('User has no streamId')
+      showToast('User has no streamId', 'warning')
       return
     }
 
@@ -551,7 +554,7 @@ const callUser = async (user: User) => {
     callingUsers.value.delete(user.id)
     console.log('Removed from callingUsers:', user.id)
     console.log('=== callUser completed ===')
-    alert('Play successful!')
+    showToast('Play successful!', 'success')
   } catch (error) {
     console.error('=== callUser error ===')
     console.error('Error details:', error)
@@ -565,7 +568,7 @@ const callUser = async (user: User) => {
       remoteUsers.value = remoteUsers.value.filter(u => u.id !== user.id)
     }
     
-    alert('Play failed: ' + (error as Error).message)
+    showToast('Play failed: ' + (error as Error).message, 'error')
   }
 }
 
@@ -581,10 +584,10 @@ const handleFfmpegPublish = async () => {
     console.log('Starting ffmpeg publish...')
     const response = await rtcApi.startFfmpegPublish()
     console.log('FFmpeg publish response:', response)
-    alert('FFmpeg publish successful!')
+    showToast('FFmpeg publish successful!', 'success')
   } catch (error) {
     console.error('Error starting ffmpeg publish:', error)
-    alert('FFmpeg publish failed: ' + (error as Error).message)
+    showToast('FFmpeg publish failed: ' + (error as Error).message, 'error')
   } finally {
     isCommandLoading.value = false
   }
@@ -596,10 +599,10 @@ const handleRtmpPublish = async () => {
     console.log('Starting rtmp publish...')
     const response = await rtcApi.startRtmpPublish()
     console.log('RTMP publish response:', response)
-    alert('RTMP publish successful!')
+    showToast('RTMP publish successful!', 'success')
   } catch (error) {
     console.error('Error starting rtmp publish:', error)
-    alert('RTMP publish failed: ' + (error as Error).message)
+    showToast('RTMP publish failed: ' + (error as Error).message, 'error')
   } finally {
     isCommandLoading.value = false
   }
@@ -613,10 +616,10 @@ const handleRtmpPlay = async () => {
     const userId = localUser?.streamId || 'default'
     const response = await rtcApi.startRtmpPlay(userId)
     console.log('RTMP play response:', response)
-    alert('RTMP play successful!')
+    showToast('RTMP play successful!', 'success')
   } catch (error) {
     console.error('Error starting rtmp play:', error)
-    alert('RTMP play failed: ' + (error as Error).message)
+    showToast('RTMP play failed: ' + (error as Error).message, 'error')
   } finally {
     isCommandLoading.value = false
   }
@@ -628,10 +631,10 @@ const handleFilePlay = async () => {
     console.log('Starting file play...')
     const response = await rtcApi.startFilePlay()
     console.log('File play response:', response)
-    alert('File play successful!')
+    showToast('File play successful!', 'success')
   } catch (error) {
     console.error('Error starting file play:', error)
-    alert('File play failed: ' + (error as Error).message)
+    showToast('File play failed: ' + (error as Error).message, 'error')
   } finally {
     isCommandLoading.value = false
   }
@@ -643,10 +646,10 @@ const handleFilePlayStop = async () => {
     console.log('Stopping file play...')
     const response = await rtcApi.stopFilePlay()
     console.log('File play stop response:', response)
-    alert('File play stopped successfully!')
+    showToast('File play stopped successfully!', 'success')
   } catch (error) {
     console.error('Error stopping file play:', error)
-    alert('File play stop failed: ' + (error as Error).message)
+    showToast('File play stop failed: ' + (error as Error).message, 'error')
   } finally {
     isCommandLoading.value = false
   }

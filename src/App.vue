@@ -8,12 +8,14 @@
       </span>
     </div>
     <router-view />
+    <Toast />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted } from 'vue'
 import { useSSE } from './composables/useSSE'
+import Toast from './components/Toast.vue'
 
 const SSE_URL = import.meta.env.VITE_SSE_URL || '/api/v1/sse/events'
 
