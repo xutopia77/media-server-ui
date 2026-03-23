@@ -11,14 +11,58 @@
           </router-link>
         </li>
       </ul>
+      <div class="navbar-actions">
+        <div class="connection-indicator" :class="statusClass">
+          <span class="status-dot"></span>
+          <span class="status-text">{{ statusText }}</span>
+        </div>
+        <Toast />
+      </div>
     </div>
   </nav>
 </template>
 
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
+import { computed, onMounted } from 'vue'
+import { useSSE } from '../composables/useSSE'
+import Toast from './Toast.vue'
 
 const route = useRoute()
+
+const SSE_URL = import.meta.env.VITE_SSE_URL || '/api/v1/sse/events'
+
+const { status, lastHeartbeat, connect } = useSSE({
+  url: SSE_URL,
+  reconnectInterval: 3000,
+  maxReconnectAttempts: 10,
+  onMessage: (event) => {
+    console.log('SSE message received:', event.data)
+  },
+  onError: (event) => {
+    console.error('SSE connection error:', event)
+  },
+  onOpen: () => {
+    console.log('SSE connection opened')
+  },
+  onClose: () => {
+    console.log('SSE connection closed')
+  },
+})
+
+const statusClass = computed(() => {
+  return `status-${status.value}`
+})
+
+const statusText = computed(() => {
+  const textMap = {
+    connecting: 'Connecting...',
+    connected: 'Connected',
+    disconnected: 'Disconnected',
+    error: 'Error',
+  }
+  return textMap[status.value]
+})
 
 interface MenuItem {
   name: string
@@ -37,6 +81,10 @@ const menuItems: MenuItem[] = [
 const isActive = (path: string) => {
   return route.path === path
 }
+
+onMounted(() => {
+  connect()
+})
 </script>
 
 <style scoped>
@@ -107,5 +155,120 @@ const isActive = (path: string) => {
   right: 0;
   height: 2px;
   background-color: #0e639c;
+}
+
+.navbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.connection-indicator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  background-color: #3c3c3c;
+  border-radius: 3px;
+  font-size: 12px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.status-connecting .status-dot {
+  background-color: #ffa500;
+}
+
+.status-connected .status-dot {
+  background-color: #4caf50;
+}
+
+.status-disconnected .status-dot {
+  background-color: #f44336;
+  animation: none;
+}
+
+.status-error .status-dot {
+  background-color: #f44336;
+  animation: none;
+}
+
+.status-text {
+  font-weight: 500;
+  color: #cccccc;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+@media (max-width: 768px) {
+  .navbar-container {
+    padding: 0 10px;
+  }
+
+  .navbar-brand h1 {
+    font-size: 18px;
+  }
+
+  .navbar-link {
+    padding: 10px 12px;
+    font-size: 13px;
+  }
+
+  .navbar-actions {
+    gap: 8px;
+  }
+
+  .connection-indicator {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+
+  .status-text {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .navbar-container {
+    padding: 0 8px;
+  }
+
+  .navbar-brand h1 {
+    font-size: 16px;
+  }
+
+  .navbar-menu {
+    gap: 2px;
+  }
+
+  .navbar-link {
+    padding: 10px 8px;
+    font-size: 12px;
+  }
+
+  .navbar-actions {
+    gap: 6px;
+  }
+
+  .connection-indicator {
+    padding: 4px 6px;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+  }
 }
 </style>

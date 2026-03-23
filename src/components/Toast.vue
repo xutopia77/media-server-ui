@@ -69,10 +69,9 @@ const togglePanel = () => {
 
 <style scoped>
 .toast-wrapper {
-  position: fixed;
-  top: 10px;
-  right: 10px;
-  z-index: 9999;
+  position: relative;
+  display: flex;
+  align-items: center;
 }
 
 .toast-toggle-btn {
@@ -80,15 +79,14 @@ const togglePanel = () => {
   background-color: #3c3c3c;
   border: none;
   color: #cccccc;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .toast-toggle-btn:hover {
@@ -112,16 +110,16 @@ const togglePanel = () => {
   right: -2px;
   background-color: #f44336;
   color: #ffffff;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: bold;
-  min-width: 18px;
-  height: 18px;
-  border-radius: 9px;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 5px;
-  border: 2px solid #1e1e1e;
+  padding: 0 4px;
+  border: 2px solid #252526;
 }
 
 .toast-container {
