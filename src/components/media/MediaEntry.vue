@@ -218,6 +218,7 @@ import NavBar from '../NavBar.vue'
 import { createRtcApi } from '@/utils/RtcApi'
 import * as Dty from '@/utils/dataTypedef'
 import { useToast } from '@/composables/useToast'
+import { eventBus } from '@/utils/eventBus'
 
 const { showToast } = useToast()
 
@@ -328,9 +329,11 @@ const saveSettings = () => {
 onMounted(() => {
   generateLocalStreamId()
   startLocalCamera()
-  fetchRoomInfo()
-  startRoomInfoPolling()
+  // fetchRoomInfo()
+  // startRoomInfoPolling()
   startHeartBeat()
+  
+  eventBus.on('room_event', handleRoomEvent)
 })
 
 onUnmounted(() => {
@@ -338,7 +341,110 @@ onUnmounted(() => {
   stopHeartBeat()
   stopPublish()
   stopLocalCamera()
+  
+  eventBus.off('room_event', handleRoomEvent)
 })
+
+const handleRoomEvent = (data: unknown) => {
+  console.log('=== handleRoomEvent called ===')
+  console.log('Event data received:', data)
+  console.log('Event data type:', typeof data)
+  
+  const eventData = data as Dty.RoomEventData
+  console.log('Event data keys:', eventData ? Object.keys(eventData) : 'null')
+  
+  const { eventType, data: roomData } = eventData
+  const { user, users: eventUsers } = roomData || {}
+  
+  console.log('Extracted eventType:', eventType)
+  console.log('Extracted user:', user)
+  console.log('Extracted eventUsers:', eventUsers)
+  
+  switch (eventType) {
+    case 'UserJoin':
+      showToast(`User ${user?.streamId || user?.uid || 'Unknown'} joined the room`, 'info')
+      break
+      
+    case 'UserLeave':
+      showToast(`User ${user?.streamId || user?.uid || 'Unknown'} left the room`, 'info')
+      break
+      
+    case 'PublishStart':
+      showToast(`User ${user?.streamId || user?.uid || 'Unknown'} started publishing`, 'info')
+      break
+      
+    case 'PublishStop':
+      showToast(`User ${user?.streamId || user?.uid || 'Unknown'} stopped publishing`, 'info')
+      break
+      
+    case 'SubscribeStart':
+      showToast(`User ${user?.streamId || user?.uid || 'Unknown'} started subscribing`, 'info')
+      break
+      
+    case 'SubscribeStop':
+      showToast(`User ${user?.streamId || user?.uid || 'Unknown'} stopped subscribing`, 'info')
+      break
+      
+    default:
+      console.log('Unknown event type:', eventType)
+      break
+  }
+  
+  if (eventUsers && Array.isArray(eventUsers)) {
+    console.log('Calling updateUsersFromEvent with:', eventUsers)
+    updateUsersFromEvent(eventUsers)
+  } else {
+    console.log('No eventUsers to update, eventUsers:', eventUsers)
+  }
+  
+  console.log('=== handleRoomEvent completed ===')
+}
+
+const updateUsersFromEvent = (eventUsers: Dty.RoomUser[]) => {
+  console.log('=== updateUsersFromEvent called ===')
+  console.log('Event users received:', eventUsers)
+  console.log('Event users length:', eventUsers.length)
+  console.log('Event users type:', Array.isArray(eventUsers) ? 'array' : typeof eventUsers)
+  
+  const localUser = users.value.find(u => u.id === 'local')
+  console.log('Current local user:', localUser)
+  console.log('Current users.value:', users.value)
+  
+  const roomUsers: User[] = eventUsers.map((roomUser: Dty.RoomUser, index) => {
+    console.log(`Mapping user ${index}:`, roomUser)
+    return {
+      id: roomUser.uid,
+      status: 'online',
+      appId: roomUser.appId,
+      publishers: roomUser.publishers,
+      streamDir: roomUser.streamDir,
+      streamId: roomUser.streamId,
+      subscribers: roomUser.subscribers,
+      type: roomUser.type,
+      uid: roomUser.uid
+    }
+  })
+
+  console.log('Mapped room users:', roomUsers)
+  
+  users.value = [
+    localUser || {
+      id: 'local',
+      status: 'online',
+      appId: 'local',
+      publishers: 0,
+      streamDir: 'Publish',
+      streamId: '',
+      subscribers: 0,
+      type: 'rtc',
+      uid: 'local'
+    },
+    ...roomUsers
+  ]
+  
+  console.log('Updated users.value:', users.value)
+  console.log('=== updateUsersFromEvent completed ===')
+}
 
 const generateLocalStreamId = () => {
   const now = new Date()

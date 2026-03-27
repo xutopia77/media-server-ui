@@ -7,6 +7,7 @@ export interface SSEOptions {
   reconnectInterval?: number
   maxReconnectAttempts?: number
   onMessage?: (event: MessageEvent) => void
+  onEvent?: (event: string, data: string) => void
   onError?: (event: Event) => void
   onOpen?: (event: Event) => void
   onClose?: (event: Event) => void
@@ -18,6 +19,7 @@ export function useSSE(options: SSEOptions) {
     reconnectInterval = 3000,
     maxReconnectAttempts = 10,
     onMessage,
+    onEvent,
     onError,
     onOpen,
     onClose,
@@ -49,6 +51,14 @@ export function useSSE(options: SSEOptions) {
       eventSource.value.onmessage = (event) => {
         lastHeartbeat.value = new Date()
         onMessage?.(event)
+      }
+
+      if (onEvent) {
+        eventSource.value.addEventListener('room_event', (event: MessageEvent) => {
+          console.log('SSE custom event received:', event.type)
+          console.log('SSE custom event data:', event.data)
+          onEvent(event.type, event.data)
+        })
       }
 
       eventSource.value.onerror = (event) => {

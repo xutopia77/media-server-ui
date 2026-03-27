@@ -27,6 +27,7 @@ import { useRoute } from 'vue-router'
 import { computed, onMounted } from 'vue'
 import { useSSE } from '../composables/useSSE'
 import Toast from './Toast.vue'
+import { eventBus } from '../utils/eventBus'
 
 const route = useRoute()
 
@@ -38,6 +39,27 @@ const { status,  connect } = useSSE({
   maxReconnectAttempts: 10,
   onMessage: (event) => {
     console.log('SSE message received:', event.data)
+  },
+  onEvent: (eventType, data) => {
+    console.log('SSE custom event received:', eventType)
+    console.log('SSE custom event data:', data)
+    
+    try {
+      const eventData = JSON.parse(data)
+      console.log('Parsed event data:', eventData)
+      console.log('Event data keys:', Object.keys(eventData))
+      console.log('Has eventType:', 'eventType' in eventData)
+      
+      if (eventData.eventType) {
+        console.log('Emitting room event:', eventData)
+        eventBus.emit('room_event', eventData)
+        console.log('Room event emitted successfully')
+      } else {
+        console.log('No eventType in event data, skipping')
+      }
+    } catch (error) {
+      console.error('Failed to parse SSE message:', error)
+    }
   },
   onError: (event) => {
     console.error('SSE connection error:', event)

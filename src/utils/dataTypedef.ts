@@ -179,6 +179,25 @@ export interface HeartBeatRequest {
   cmd: string
 }
 
+export interface RoomEventData {
+  eventType: string
+  roomId: string
+  uid: string
+  data: {
+    user?: {
+      appId: string
+      streamId: string
+      type: string
+      uid: string
+      publishers?: number
+      streamDir?: string
+      subscribers?: number
+    }
+    users: RoomUser[]
+  }
+}
+
+
 export interface SysInfoResponse {
   code: number
   data: SysInfoData
