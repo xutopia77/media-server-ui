@@ -72,7 +72,7 @@ export const useToast = () => {
       info: 'ℹ',
       warning: '⚠'
     }
-    return icons[type] || icons.info
+    return icons[type] || icons.info || ''
   }
 
   const formatTime = (timestamp: number): string => {

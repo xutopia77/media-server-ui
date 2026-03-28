@@ -279,7 +279,6 @@ const localVideoRef = ref<HTMLVideoElement | null>(null)
 const remoteVideoRefs = ref<Map<string, HTMLVideoElement>>(new Map())
 const showSettings = ref(false)
 const isPublishing = ref(false)
-const roomInfo = ref<Dty.RoomInfo | null>(null)
 const sysInfo = ref<Dty.SysInfoData | null>(null)
 const rtcApi = createRtcApi()
 let roomInfoTimer: number | null = null
@@ -329,8 +328,6 @@ const saveSettings = () => {
 onMounted(() => {
   generateLocalStreamId()
   startLocalCamera()
-  // fetchRoomInfo()
-  // startRoomInfoPolling()
   startHeartBeat()
   
   eventBus.on('room_event', handleRoomEvent)
@@ -526,52 +523,7 @@ const stopPublish = () => {
   showToast('Publish stopped', 'info')
 }
 
-const fetchRoomInfo = async () => {
-  try {
-    const info = await rtcApi.getRoomInfo()
-    roomInfo.value = info
-    console.log('Room info updated:', info)
 
-    if (info && info.users) {
-      const roomUsers: User[] = info.users.map((roomUser: Dty.RoomUser) => ({
-        id: roomUser.uid,
-        status: 'online',
-        appId: roomUser.appId,
-        publishers: roomUser.publishers,
-        streamDir: roomUser.streamDir,
-        streamId: roomUser.streamId,
-        subscribers: roomUser.subscribers,
-        type: roomUser.type,
-        uid: roomUser.uid
-      }))
-
-      const localUser = users.value.find(u => u.id === 'local')
-      users.value = [
-        localUser || {
-          id: 'local',
-          status: 'online',
-          appId: 'local',
-          publishers: 0,
-          streamDir: 'Publish',
-          streamId: '',
-          subscribers: 0,
-          type: 'rtc',
-          uid: 'local'
-        },
-        ...roomUsers
-      ]
-    }
-  } catch (error) {
-    console.error('Error fetching room info:', error)
-  }
-}
-
-const startRoomInfoPolling = () => {
-  fetchRoomInfo()
-  roomInfoTimer = window.setInterval(() => {
-    fetchRoomInfo()
-  }, 5000)
-}
 
 const stopRoomInfoPolling = () => {
   if (roomInfoTimer !== null) {
