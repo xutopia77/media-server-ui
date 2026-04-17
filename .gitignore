@@ -38,3 +38,4 @@ __screenshots__/
 # Vite
 *.timestamp-*-*.mjs
 doc/rtcApi.js
+web_source.tar.gz
