@@ -21,11 +21,7 @@ export const useRoomStore = defineStore('room', () => {
   const otherUsers = computed(() => users.value.filter(u => u.uid !== currentUser.value?.uid))
 
   const generateUid = (): string => {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-      const r = Math.random() * 16 | 0
-      const v = c === 'x' ? r : (r & 0x3 | 0x8)
-      return v.toString(16)
-    })
+    return Date.now().toString()
   }
 
   const createLocalUser = (uid: string, roomId: string): RoomUser => ({
@@ -43,7 +39,7 @@ export const useRoomStore = defineStore('room', () => {
     streamId: uid
   })
 
-  const joinRoom = async (roomId: string, nickname?: string) => {
+  const joinRoom = async (roomId: string, nickname?: string, uid?: string) => {
     if (isJoining.value) {
       return { success: false, error: 'Already joining room' }
     }
@@ -51,16 +47,16 @@ export const useRoomStore = defineStore('room', () => {
     isJoining.value = true
     error.value = null
 
-    const uid = currentUser.value?.uid || generateUid()
+    const finalUid = uid || currentUser.value?.uid || generateUid()
 
     try {
       await rtcApi.joinRoom({
         roomId,
-        uid,
+        uid: finalUid,
         nickname: nickname || undefined
       })
 
-      const localUser = createLocalUser(uid, roomId)
+      const localUser = createLocalUser(finalUid, roomId)
       currentUser.value = localUser
 
       currentRoom.value = {
@@ -72,16 +68,16 @@ export const useRoomStore = defineStore('room', () => {
       users.value = [localUser]
       isJoined.value = true
 
-      startKeepAlive(roomId, uid)
+      startKeepAlive(roomId, finalUid)
 
       eventBus.on('room_event', handleRoomEvent)
 
-      return { success: true, uid }
+      return { success: true, uid: finalUid }
     } catch (err) {
       const errorMsg = (err as Error).message || 'Unknown error'
 
       if (errorMsg.includes('already in room')) {
-        const localUser = createLocalUser(uid, roomId)
+        const localUser = createLocalUser(finalUid, roomId)
         currentUser.value = localUser
         currentRoom.value = {
           roomId,
@@ -91,10 +87,10 @@ export const useRoomStore = defineStore('room', () => {
         users.value = [localUser]
         isJoined.value = true
 
-        startKeepAlive(roomId, uid)
+        startKeepAlive(roomId, finalUid)
         eventBus.on('room_event', handleRoomEvent)
 
-        return { success: true, uid, message: 'Reconnected to room' }
+        return { success: true, uid: finalUid, message: 'Reconnected to room' }
       }
 
       error.value = errorMsg

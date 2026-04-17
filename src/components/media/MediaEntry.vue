@@ -11,17 +11,28 @@
               {{ roomStore.isJoined ? '🟢 Joined' : '🔴 Not Joined' }}
             </span>
           </div>
-          <span class="user-count">{{ roomStore.users.length }} online</span>
+          <div class="my-user-info">
+            <span class="my-uid">My ID: {{ myUid }}</span>
+          </div>
+          <div v-if="!roomStore.isJoined" class="sidebar-actions">
+            <button 
+              class="join-room-btn" 
+              @click="handleJoinRoom"
+              :disabled="roomStore.isJoining"
+            >
+              {{ roomStore.isJoining ? 'Joining...' : 'Join Room' }}
+            </button>
+          </div>
+          <span class="user-count">{{ otherUsers.length }} online</span>
         </div>
         <div class="user-list">
           <div
-            v-for="user in roomStore.users"
+            v-for="user in otherUsers"
             :key="user.uid"
-            class="user-item"
-            :class="{ active: user.uid === roomStore.currentUser?.uid, 'local-user': user.uid === roomStore.currentUser?.uid, 'remote-user': user.uid !== roomStore.currentUser?.uid }"
+            class="user-item remote-user"
           >
-            <div class="user-avatar" :class="{ 'local-avatar': user.uid === roomStore.currentUser?.uid, 'remote-avatar': user.uid !== roomStore.currentUser?.uid }">
-              {{ user.uid === roomStore.currentUser?.uid ? 'L' : (user.streamId ? user.streamId.charAt(0) : 'R') }}
+            <div class="user-avatar remote-avatar">
+              {{ user.streamId ? user.streamId.charAt(0) : 'R' }}
             </div>
             <div class="user-info">
               <span class="user-name">{{ user.streamId || user.uid }}</span>
@@ -36,7 +47,6 @@
                   👥 {{ user.subscribers }}
                 </span>
                 <button
-                  v-if="user.uid !== roomStore.currentUser?.uid"
                   class="call-btn"
                   @click="callUser(user)"
                   :disabled="isCallingUser(user.uid)"
@@ -52,15 +62,7 @@
       <div class="video-area">
         <div class="video-header">
           <div class="video-header-left">
-            <button 
-              v-if="!roomStore.isJoined" 
-              class="join-room-btn" 
-              @click="handleJoinRoom"
-              :disabled="roomStore.isJoining"
-            >
-              {{ roomStore.isJoining ? 'Joining...' : 'Join Room' }}
-            </button>
-            <h1 v-else>Video Chat</h1>
+            <h1>Video Chat</h1>
           </div>
           <div class="video-controls">
             <template v-if="roomStore.isJoined">
@@ -80,15 +82,11 @@
                 <span class="icon">{{ isPublishing ? '🛑' : '📡' }}</span>
                 <span class="label">{{ isPublishing ? 'Stop' : 'Publish' }}</span>
               </button>
+              <button class="control-btn leave-btn" title="Leave Room" @click="handleLeaveRoom">
+                <span class="icon">🚪</span>
+                <span class="label">Leave</span>
+              </button>
             </template>
-            <button class="control-btn" title="Settings" @click="toggleSettings">
-              <span class="icon">⚙️</span>
-              <span class="label">Settings</span>
-            </button>
-            <button v-if="roomStore.isJoined" class="control-btn leave-btn" title="Leave Room" @click="handleLeaveRoom">
-              <span class="icon">🚪</span>
-              <span class="label">Leave</span>
-            </button>
           </div>
         </div>
 
@@ -177,19 +175,19 @@
             <div class="settings-section">
               <h3>Backend Commands</h3>
               <div class="command-buttons">
-                <button class="btn btn-command" @click="handleFfmpegPublish" :disabled="isCommandLoading">
+                <button class="btn btn-command" @click="handleFfmpegPublish" :disabled="isCommandLoading || !roomStore.isJoined">
                   {{ isCommandLoading ? 'Processing...' : 'FFmpeg Publish' }}
                 </button>
-                <button class="btn btn-command" @click="handleRtmpPublish" :disabled="isCommandLoading">
+                <button class="btn btn-command" @click="handleRtmpPublish" :disabled="isCommandLoading || !roomStore.isJoined">
                   {{ isCommandLoading ? 'Processing...' : 'RTMP Publish' }}
                 </button>
-                <button class="btn btn-command" @click="handleRtmpPlay" :disabled="isCommandLoading">
+                <button class="btn btn-command" @click="handleRtmpPlay" :disabled="isCommandLoading || !roomStore.isJoined">
                   {{ isCommandLoading ? 'Processing...' : 'RTMP Play' }}
                 </button>
-                <button class="btn btn-command" @click="handleFilePlay" :disabled="isCommandLoading">
+                <button class="btn btn-command" @click="handleFilePlay" :disabled="isCommandLoading || !roomStore.isJoined">
                   {{ isCommandLoading ? 'Processing...' : 'File Play' }}
                 </button>
-                <button class="btn btn-command btn-danger" @click="handleFilePlayStop" :disabled="isCommandLoading">
+                <button class="btn btn-command btn-danger" @click="handleFilePlayStop" :disabled="isCommandLoading || !roomStore.isJoined">
                   {{ isCommandLoading ? 'Processing...' : 'File Play Stop' }}
                 </button>
               </div>
@@ -240,7 +238,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, reactive } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import NavBar from '../NavBar.vue'
 import { useRoomStore } from '@/stores/room'
@@ -251,6 +249,10 @@ import { eventBus } from '@/utils/eventBus'
 const router = useRouter()
 const { showToast } = useToast()
 const roomStore = useRoomStore()
+
+const myUid = ref(roomStore.generateUid())
+
+const otherUsers = computed(() => roomStore.users.filter(u => u.uid !== roomStore.currentUser?.uid))
 
 interface RemoteUser extends RoomUser {
   videoStream?: MediaStream
@@ -309,7 +311,7 @@ const saveSettings = () => {
 }
 
 const handleJoinRoom = async () => {
-  const result = await roomStore.joinRoom('2001')
+  const result = await roomStore.joinRoom('2001', undefined, myUid.value)
   
   if (result.success) {
     showToast(result.message || 'Joined room successfully!', 'success')
@@ -683,6 +685,46 @@ const handleFilePlayStop = async () => {
 
 .room-status.joined {
   color: #4caf50;
+}
+
+.my-user-info {
+  padding: 8px 12px;
+  background: #2a2a2a;
+  border-radius: 6px;
+}
+
+.my-uid {
+  font-size: 13px;
+  color: #4fc3f7;
+  font-weight: 500;
+}
+
+.sidebar-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sidebar-actions .join-room-btn {
+  padding: 6px 12px;
+  background: linear-gradient(135deg, #4caf50, #45a049);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.sidebar-actions .join-room-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #45a049, #3d8b40);
+}
+
+.sidebar-actions .join-room-btn:disabled {
+  background: #555;
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .user-count {
