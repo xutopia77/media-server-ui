@@ -134,17 +134,28 @@ export interface RunCmdResponse {
   msg?: string
 }
 
+export type UserStatus = 'online' | 'offline' | 'busy'
+export type UserType = 'webrtc' | 'live' | 'rtc'
+
 export interface RoomUser {
+  uid: string
+  roomId: string
+  type: UserType
+  status: UserStatus
+  nickname?: string
+  joinedAt?: number
+  lastActiveAt?: number
+
   appId: string
   publishers: number
+  subscribers: number
   streamDir: string
   streamId: string
-  subscribers: number
-  type: string
-  uid: string
 }
 
 export interface RoomInfo {
+  roomId?: string
+  createdAt?: number
   users: RoomUser[]
 }
 
@@ -187,6 +198,16 @@ export interface KeepAliveResponse {
   code: number
   status: string
   desc: string
+}
+
+export enum RoomEventType {
+  UserJoin = 'UserJoin',
+  UserLeave = 'UserLeave',
+  UserPublish = 'UserPublish',
+  UserUnpublish = 'UserUnpublish',
+  UserSubscribe = 'UserSubscribe',
+  UserUnsubscribe = 'UserUnsubscribe',
+  RoomClose = 'RoomClose'
 }
 
 export interface RoomEventData {

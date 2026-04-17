@@ -6,25 +6,25 @@
         <div class="sidebar-header">
           <h2>Participants</h2>
           <div class="room-info">
-            <span class="room-id">Room: {{ roomState.roomId }}</span>
-            <span class="room-status" :class="{ joined: isJoinedRoom }">
-              {{ isJoinedRoom ? '🟢 Joined' : '🔴 Not Joined' }}
+            <span class="room-id">Room: {{ roomStore.currentRoom?.roomId || '2001' }}</span>
+            <span class="room-status" :class="{ joined: roomStore.isJoined }">
+              {{ roomStore.isJoined ? '🟢 Joined' : '🔴 Not Joined' }}
             </span>
           </div>
-          <span class="user-count">{{ users.length }} online</span>
+          <span class="user-count">{{ roomStore.users.length }} online</span>
         </div>
         <div class="user-list">
           <div
-            v-for="user in users"
-            :key="user.id"
+            v-for="user in roomStore.users"
+            :key="user.uid"
             class="user-item"
-            :class="{ active: user.id === currentUser.id, 'local-user': user.id === 'local', 'remote-user': user.id !== 'local' }"
+            :class="{ active: user.uid === roomStore.currentUser?.uid, 'local-user': user.uid === roomStore.currentUser?.uid, 'remote-user': user.uid !== roomStore.currentUser?.uid }"
           >
-            <div class="user-avatar" :class="{ 'local-avatar': user.id === 'local', 'remote-avatar': user.id !== 'local' }">
-              {{ user.id === 'local' ? 'L' : (user.streamId ? user.streamId.charAt(0) : 'R') }}
+            <div class="user-avatar" :class="{ 'local-avatar': user.uid === roomStore.currentUser?.uid, 'remote-avatar': user.uid !== roomStore.currentUser?.uid }">
+              {{ user.uid === roomStore.currentUser?.uid ? 'L' : (user.streamId ? user.streamId.charAt(0) : 'R') }}
             </div>
             <div class="user-info">
-              <span class="user-name">{{ user.streamId || user.uid || user.id }}</span>
+              <span class="user-name">{{ user.streamId || user.uid }}</span>
               <div class="user-details">
                 <span class="user-status" :class="user.status">
                   {{ user.status }}
@@ -36,12 +36,12 @@
                   👥 {{ user.subscribers }}
                 </span>
                 <button
-                  v-if="user.id !== 'local'"
+                  v-if="user.uid !== roomStore.currentUser?.uid"
                   class="call-btn"
                   @click="callUser(user)"
-                  :disabled="isCallingUser(user.id)"
+                  :disabled="isCallingUser(user.uid)"
                 >
-                  {{ isCallingUser(user.id) ? 'Calling...' : 'Call' }}
+                  {{ isCallingUser(user.uid) ? 'Calling...' : 'Call' }}
                 </button>
               </div>
             </div>
@@ -53,17 +53,17 @@
         <div class="video-header">
           <div class="video-header-left">
             <button 
-              v-if="!isJoinedRoom" 
+              v-if="!roomStore.isJoined" 
               class="join-room-btn" 
               @click="handleJoinRoom"
-              :disabled="isJoiningRoom"
+              :disabled="roomStore.isJoining"
             >
-              {{ isJoiningRoom ? 'Joining...' : 'Join Room' }}
+              {{ roomStore.isJoining ? 'Joining...' : 'Join Room' }}
             </button>
             <h1 v-else>Video Chat</h1>
           </div>
           <div class="video-controls">
-            <template v-if="isJoinedRoom">
+            <template v-if="roomStore.isJoined">
               <button class="control-btn" title="Mute">
                 <span class="icon">🎤</span>
                 <span class="label">Mute</span>
@@ -85,7 +85,7 @@
               <span class="icon">⚙️</span>
               <span class="label">Settings</span>
             </button>
-            <button v-if="isJoinedRoom" class="control-btn leave-btn" title="Leave Room" @click="handleLeaveRoom">
+            <button v-if="roomStore.isJoined" class="control-btn leave-btn" title="Leave Room" @click="handleLeaveRoom">
               <span class="icon">🚪</span>
               <span class="label">Leave</span>
             </button>
@@ -213,15 +213,15 @@
 
           <div
             v-for="remoteUser in remoteUsers"
-            :key="remoteUser.id"
+            :key="remoteUser.uid"
             class="video-card remote-video"
           >
             <video
-              :ref="(el: any) => setRemoteVideoRef(el, remoteUser.id)"
+              :ref="(el: any) => setRemoteVideoRef(el, remoteUser.uid)"
               autoplay
               playsinline
             ></video>
-            <div class="video-label">{{ remoteUser.streamId || remoteUser.uid || remoteUser.id }}</div>
+            <div class="video-label">{{ remoteUser.streamId || remoteUser.uid }}</div>
             <div class="video-status">
               <span class="status-dot"></span>
               {{ remoteUser.status }}
@@ -240,31 +240,19 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { ref, onMounted, onUnmounted, reactive } from 'vue'
+import { useRouter } from 'vue-router'
 import NavBar from '../NavBar.vue'
-import { createRtcApi } from '@/utils/RtcApi'
-import * as Dty from '@/utils/dataTypedef'
+import { useRoomStore } from '@/stores/room'
+import type { RoomUser } from '@/utils/dataTypedef'
 import { useToast } from '@/composables/useToast'
 import { eventBus } from '@/utils/eventBus'
 
-const route = useRoute()
 const router = useRouter()
 const { showToast } = useToast()
+const roomStore = useRoomStore()
 
-interface User {
-  id: string
-  status: 'online' | 'offline' | 'busy'
-  appId?: string
-  publishers?: number
-  streamDir?: string
-  streamId?: string
-  subscribers?: number
-  type?: string
-  uid?: string
-}
-
-interface RemoteUser extends User {
+interface RemoteUser extends RoomUser {
   videoStream?: MediaStream
 }
 
@@ -279,49 +267,14 @@ interface WebRTCSettings {
   bandwidthLimit: string
 }
 
-const currentUser = ref<User>({
-  id: 'local',
-  status: 'online'
-})
-
-const users = ref<User[]>([
-  {
-    id: 'local',
-    status: 'online',
-    appId: 'local',
-    publishers: 0,
-    streamDir: 'Publish',
-    streamId: '',
-    subscribers: 0,
-    type: 'rtc',
-    uid: 'local'
-  },
-])
-
-const remoteUsers = ref<RemoteUser[]>([
-  { id: 'user1', status: 'online' },
-  { id: 'user2', status: 'online' },
-])
-
+const remoteUsers = ref<RemoteUser[]>([])
 const callingUsers = ref<Set<string>>(new Set())
 
 const localVideoRef = ref<HTMLVideoElement | null>(null)
 const remoteVideoRefs = ref<Map<string, HTMLVideoElement>>(new Map())
 const showSettings = ref(false)
 const isPublishing = ref(false)
-const isJoiningRoom = ref(false)
-const rtcApi = createRtcApi()
-let roomInfoTimer: number | null = null
-let keepAliveTimer: number | null = null
-
-const roomState = reactive({
-  joined: false,
-  roomId: '2001',
-  uid: '',
-  nickname: ''
-})
-
-const isJoinedRoom = computed(() => roomState.joined)
+const isCommandLoading = ref(false)
 
 const settings = reactive<WebRTCSettings>({
   cameraDevice: '',
@@ -334,16 +287,7 @@ const settings = reactive<WebRTCSettings>({
   bandwidthLimit: 'unlimited'
 })
 
-const defaultSettings: WebRTCSettings = {
-  cameraDevice: '',
-  videoQuality: '720',
-  frameRate: '30',
-  microphoneDevice: '',
-  audioQuality: 'high',
-  noiseCancellation: true,
-  iceServers: 'both',
-  bandwidthLimit: 'unlimited'
-}
+const defaultSettings: WebRTCSettings = { ...settings }
 
 const setRemoteVideoRef = (el: HTMLVideoElement | null, userId: string) => {
   if (el) {
@@ -364,37 +308,11 @@ const saveSettings = () => {
   showSettings.value = false
 }
 
-const generateUid = () => {
-  const timestamp = Date.now()
-  const random = Math.floor(Math.random() * 10000)
-  return `user_${timestamp}_${random}`
-}
-
 const handleJoinRoom = async () => {
-  if (isJoiningRoom.value) {
-    return
-  }
-
-  isJoiningRoom.value = true
+  const result = await roomStore.joinRoom('2001')
   
-  if (!roomState.uid) {
-    roomState.uid = generateUid()
-  }
-
-  try {
-    await rtcApi.joinRoom({
-      roomId: roomState.roomId,
-      uid: roomState.uid,
-      nickname: roomState.nickname || undefined
-    })
-    
-    roomState.joined = true
-    showToast('Joined room successfully!', 'success')
-    
-    generateLocalStreamId()
-    startKeepAlive()
-    
-    eventBus.on('room_event', handleRoomEvent)
+  if (result.success) {
+    showToast(result.message || 'Joined room successfully!', 'success')
     
     try {
       await startLocalCamera()
@@ -402,31 +320,8 @@ const handleJoinRoom = async () => {
       console.error('Camera access failed:', cameraError)
       showToast('Camera access failed, but you can still participate', 'warning')
     }
-  } catch (error) {
-    console.error('Failed to join room:', error)
-    const errorMsg = (error as Error).message || 'Unknown error'
-    
-    if (errorMsg.includes('already in room')) {
-      console.log('User already in room, continuing...')
-      roomState.joined = true
-      showToast('Reconnected to room successfully!', 'success')
-      
-      generateLocalStreamId()
-      startKeepAlive()
-      
-      eventBus.on('room_event', handleRoomEvent)
-      
-      try {
-        await startLocalCamera()
-      } catch (cameraError) {
-        console.error('Camera access failed:', cameraError)
-        showToast('Camera access failed, but you can still participate', 'warning')
-      }
-    } else {
-      showToast('Failed to join room: ' + errorMsg, 'error')
-    }
-  } finally {
-    isJoiningRoom.value = false
+  } else {
+    showToast('Failed to join room: ' + (result.error || 'Unknown error'), 'error')
   }
 }
 
@@ -435,41 +330,23 @@ onMounted(async () => {
 })
 
 onUnmounted(async () => {
-  stopRoomInfoPolling()
-  stopKeepAlive()
   stopPublish()
   stopLocalCamera()
   
   eventBus.off('room_event', handleRoomEvent)
   
-  if (roomState.joined) {
-    try {
-      await rtcApi.leaveRoom({
-        roomId: roomState.roomId,
-        uid: roomState.uid
-      })
-      roomState.joined = false
-      console.log('Left room successfully')
-    } catch (error) {
-      console.error('Failed to leave room:', error)
-    }
+  if (roomStore.isJoined) {
+    await roomStore.leaveRoom()
   }
 })
 
 const handleRoomEvent = (data: unknown) => {
-  console.log('=== handleRoomEvent called ===')
-  console.log('Event data received:', data)
-  console.log('Event data type:', typeof data)
+  const eventData = data as { eventType: string; roomId: string; uid: string; data: { user?: Partial<RoomUser>; users?: RoomUser[] } }
   
-  const eventData = data as Dty.RoomEventData
-  console.log('Event data keys:', eventData ? Object.keys(eventData) : 'null')
+  if (!eventData) return
   
   const { eventType, data: roomData } = eventData
-  const { user, users: eventUsers } = roomData || {}
-  
-  console.log('Extracted eventType:', eventType)
-  console.log('Extracted user:', user)
-  console.log('Extracted eventUsers:', eventUsers)
+  const { user } = roomData || {}
   
   switch (eventType) {
     case 'UserJoin':
@@ -497,79 +374,17 @@ const handleRoomEvent = (data: unknown) => {
       break
       
     default:
-      console.log('Unknown event type:', eventType)
       break
   }
   
-  if (eventUsers && Array.isArray(eventUsers)) {
-    console.log('Calling updateUsersFromEvent with:', eventUsers)
-    updateUsersFromEvent(eventUsers)
-  } else {
-    console.log('No eventUsers to update, eventUsers:', eventUsers)
-  }
-  
-  console.log('=== handleRoomEvent completed ===')
-}
-
-const updateUsersFromEvent = (eventUsers: Dty.RoomUser[]) => {
-  console.log('=== updateUsersFromEvent called ===')
-  console.log('Event users received:', eventUsers)
-  console.log('Event users length:', eventUsers.length)
-  console.log('Event users type:', Array.isArray(eventUsers) ? 'array' : typeof eventUsers)
-  
-  const localUser = users.value.find(u => u.id === 'local')
-  console.log('Current local user:', localUser)
-  console.log('Current users.value:', users.value)
-  
-  const roomUsers: User[] = eventUsers.map((roomUser: Dty.RoomUser, index) => {
-    console.log(`Mapping user ${index}:`, roomUser)
-    return {
-      id: roomUser.uid,
-      status: 'online',
-      appId: roomUser.appId,
-      publishers: roomUser.publishers,
-      streamDir: roomUser.streamDir,
-      streamId: roomUser.streamId,
-      subscribers: roomUser.subscribers,
-      type: roomUser.type,
-      uid: roomUser.uid
-    }
-  })
-
-  console.log('Mapped room users:', roomUsers)
-  
-  users.value = [
-    localUser || {
-      id: 'local',
-      status: 'online',
-      appId: 'local',
-      publishers: 0,
-      streamDir: 'Publish',
-      streamId: '',
-      subscribers: 0,
-      type: 'rtc',
-      uid: 'local'
-    },
-    ...roomUsers
-  ]
-  
-  console.log('Updated users.value:', users.value)
-  console.log('=== updateUsersFromEvent completed ===')
-}
-
-const generateLocalStreamId = () => {
-  const now = new Date()
-  const timestamp = now.getTime()
-  const streamId = `${timestamp}`
-  const localUser = users.value.find(u => u.id === 'local')
-  if (localUser) {
-    localUser.streamId = streamId
-    console.log('Generated local streamId:', streamId)
+  if (roomData?.users && Array.isArray(roomData.users)) {
+    roomStore.updateUserList(roomData.users)
   }
 }
 
 const startLocalCamera = async () => {
   try {
+    const rtcApi = roomStore.getRtcApi()
     const stream = await rtcApi.startCamera({
       width: 1280,
       height: 720,
@@ -586,6 +401,7 @@ const startLocalCamera = async () => {
 }
 
 const stopLocalCamera = () => {
+  const rtcApi = roomStore.getRtcApi()
   rtcApi.stopCamera()
   if (localVideoRef.value) {
     localVideoRef.value.srcObject = null
@@ -602,6 +418,7 @@ const togglePublish = async () => {
 
 const startPublish = async () => {
   try {
+    const rtcApi = roomStore.getRtcApi()
     const stream = rtcApi.getStream()
     if (!stream) {
       console.error('No camera stream available')
@@ -609,15 +426,16 @@ const startPublish = async () => {
       return
     }
 
-    const localUser = users.value.find(u => u.id === 'local')
-    if (!localUser || !localUser.streamId) {
+    const currentUser = roomStore.currentUser
+    if (!currentUser || !currentUser.streamId) {
       console.error('No local streamId available')
       showToast('Local streamId is not available', 'warning')
       return
     }
 
+    const roomId = roomStore.currentRoom?.roomId || '2001'
     const sessionId = await rtcApi.startPublish(stream, {
-      streamurl: `webrtc://localhost/${roomState.roomId}/${localUser.streamId}`,
+      streamurl: `webrtc://localhost/${roomId}/${currentUser.streamId}`,
       clientip: '127.0.0.1'
     })
 
@@ -631,6 +449,7 @@ const startPublish = async () => {
 }
 
 const stopPublish = () => {
+  const rtcApi = roomStore.getRtcApi()
   rtcApi.stopPublish()
   isPublishing.value = false
   console.log('Publish stopped')
@@ -638,65 +457,23 @@ const stopPublish = () => {
 }
 
 const handleLeaveRoom = async () => {
-  try {
-    if (isPublishing.value) {
-      stopPublish()
-    }
-    
-    stopLocalCamera()
-    
-    await rtcApi.leaveRoom({
-      roomId: roomState.roomId,
-      uid: roomState.uid
-    })
-    
-    roomState.joined = false
-    showToast('Left room successfully', 'success')
-    router.push('/room')
-  } catch (error) {
-    console.error('Error leaving room:', error)
-    showToast('Failed to leave room: ' + (error as Error).message, 'error')
-  }
-}
-
-
-const stopRoomInfoPolling = () => {
-  if (roomInfoTimer !== null) {
-    clearInterval(roomInfoTimer)
-    roomInfoTimer = null
-  }
-}
-
-const sendKeepAlive = async () => {
-  if (!roomState.joined) {
-    return
+  if (isPublishing.value) {
+    stopPublish()
   }
   
-  try {
-    await rtcApi.keepAlive({
-      roomId: roomState.roomId,
-      uid: roomState.uid
-    })
-  } catch (error) {
-    console.error('Error sending keep alive:', error)
+  stopLocalCamera()
+  
+  const result = await roomStore.leaveRoom()
+  
+  if (result.success) {
+    showToast('Left room successfully', 'success')
+    router.push('/room')
+  } else {
+    showToast('Failed to leave room: ' + (result.error || 'Unknown error'), 'error')
   }
 }
 
-const startKeepAlive = () => {
-  sendKeepAlive()
-  keepAliveTimer = window.setInterval(() => {
-    sendKeepAlive()
-  }, 10000)
-}
-
-const stopKeepAlive = () => {
-  if (keepAliveTimer !== null) {
-    clearInterval(keepAliveTimer)
-    keepAliveTimer = null
-  }
-}
-
-const callUser = async (user: User) => {
+const callUser = async (user: RoomUser) => {
   console.log('=== callUser start ===')
   console.log('User info:', user)
   
@@ -708,26 +485,25 @@ const callUser = async (user: User) => {
     }
 
     console.log('streamId exists:', user.streamId)
-    callingUsers.value.add(user.id)
-    console.log('Added to callingUsers:', user.id)
+    callingUsers.value.add(user.uid)
+    console.log('Added to callingUsers:', user.uid)
 
-    const streamurl = `webrtc://localhost/${roomState.roomId}/${user.streamId}`
+    const roomId = roomStore.currentRoom?.roomId || '2001'
+    const streamurl = `webrtc://localhost/${roomId}/${user.streamId}`
     console.log('Preparing to play, streamurl:', streamurl)
 
-    const existingRemoteUser = remoteUsers.value.find(u => u.id === user.id)
-    if (existingRemoteUser) {
-      console.log('Update existing remote user:', user.id)
-    } else {
-      console.log('Add new remote user:', user.id)
+    const existingRemoteUser = remoteUsers.value.find(u => u.uid === user.uid)
+    if (!existingRemoteUser) {
+      console.log('Add new remote user:', user.uid)
       remoteUsers.value.push({
-        id: user.id,
-        status: user.status,
+        ...user,
         videoStream: undefined
       })
     }
 
     await new Promise(resolve => setTimeout(resolve, 100))
 
+    const rtcApi = roomStore.getRtcApi()
     const stream = await rtcApi.startPlay({
       streamurl: streamurl,
       clientip: '127.0.0.1'
@@ -735,13 +511,13 @@ const callUser = async (user: User) => {
 
     console.log('startPlay successful, got stream:', stream)
 
-    const updatedRemoteUser = remoteUsers.value.find(u => u.id === user.id)
+    const updatedRemoteUser = remoteUsers.value.find(u => u.uid === user.uid)
     if (updatedRemoteUser) {
       updatedRemoteUser.videoStream = stream
     }
 
-    const videoElement = remoteVideoRefs.value.get(user.id)
-    console.log('Find video element, userId:', user.id, 'videoElement:', videoElement)
+    const videoElement = remoteVideoRefs.value.get(user.uid)
+    console.log('Find video element, userId:', user.uid, 'videoElement:', videoElement)
     if (videoElement) {
       videoElement.srcObject = stream
       console.log('Set video srcObject')
@@ -749,21 +525,19 @@ const callUser = async (user: User) => {
       console.warn('Video element not found')
     }
 
-    callingUsers.value.delete(user.id)
-    console.log('Removed from callingUsers:', user.id)
+    callingUsers.value.delete(user.uid)
+    console.log('Removed from callingUsers:', user.uid)
     console.log('=== callUser completed ===')
     showToast('Play successful!', 'success')
   } catch (error) {
     console.error('=== callUser error ===')
     console.error('Error details:', error)
-    console.error('Error type:', error instanceof Error ? error.name : typeof error)
-    console.error('Error message:', error instanceof Error ? error.message : String(error))
-    callingUsers.value.delete(user.id)
-    console.log('Removed from callingUsers:', user.id)
+    callingUsers.value.delete(user.uid)
+    console.log('Removed from callingUsers:', user.uid)
     
-    const errorRemoteUser = remoteUsers.value.find(u => u.id === user.id)
+    const errorRemoteUser = remoteUsers.value.find(u => u.uid === user.uid)
     if (errorRemoteUser && !errorRemoteUser.videoStream) {
-      remoteUsers.value = remoteUsers.value.filter(u => u.id !== user.id)
+      remoteUsers.value = remoteUsers.value.filter(u => u.uid !== user.uid)
     }
     
     showToast('Play failed: ' + (error as Error).message, 'error')
@@ -774,12 +548,10 @@ const isCallingUser = (userId: string): boolean => {
   return callingUsers.value.has(userId)
 }
 
-const isCommandLoading = ref(false)
-
 const handleFfmpegPublish = async () => {
   try {
     isCommandLoading.value = true
-    console.log('Starting ffmpeg publish...')
+    const rtcApi = roomStore.getRtcApi()
     const response = await rtcApi.startFfmpegPublish()
     console.log('FFmpeg publish response:', response)
     showToast('FFmpeg publish successful!', 'success')
@@ -794,7 +566,7 @@ const handleFfmpegPublish = async () => {
 const handleRtmpPublish = async () => {
   try {
     isCommandLoading.value = true
-    console.log('Starting rtmp publish...')
+    const rtcApi = roomStore.getRtcApi()
     const response = await rtcApi.startRtmpPublish()
     console.log('RTMP publish response:', response)
     showToast('RTMP publish successful!', 'success')
@@ -809,9 +581,8 @@ const handleRtmpPublish = async () => {
 const handleRtmpPlay = async () => {
   try {
     isCommandLoading.value = true
-    console.log('Starting rtmp play...')
-    const localUser = users.value.find(u => u.id === 'local')
-    const userId = localUser?.streamId || 'default'
+    const rtcApi = roomStore.getRtcApi()
+    const userId = roomStore.currentUser?.streamId || 'default'
     const response = await rtcApi.startRtmpPlay(userId)
     console.log('RTMP play response:', response)
     showToast('RTMP play successful!', 'success')
@@ -826,7 +597,7 @@ const handleRtmpPlay = async () => {
 const handleFilePlay = async () => {
   try {
     isCommandLoading.value = true
-    console.log('Starting file play...')
+    const rtcApi = roomStore.getRtcApi()
     const response = await rtcApi.startFilePlay()
     console.log('File play response:', response)
     showToast('File play successful!', 'success')
@@ -841,7 +612,7 @@ const handleFilePlay = async () => {
 const handleFilePlayStop = async () => {
   try {
     isCommandLoading.value = true
-    console.log('Stopping file play...')
+    const rtcApi = roomStore.getRtcApi()
     const response = await rtcApi.stopFilePlay()
     console.log('File play stop response:', response)
     showToast('File play stopped successfully!', 'success')
@@ -1370,10 +1141,6 @@ const handleFilePlayStop = async () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.btn-secondary:hover {
-  background-color: #4c4c4c;
 }
 
 .video-grid {
