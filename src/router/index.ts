@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from 'vue-router'
+import { createRouter, createWebHashHistory } from 'vue-router'
 import AppEntry from '@/components/AppEntry.vue'
 import MediaEntry from '@/components/media/MediaEntry.vue'
 import GbEntry from '@/components/gb/GbEntry.vue'
@@ -7,7 +7,7 @@ import FlvEntry from '@/components/flv/flvEntry.vue'
 import AboutEntry from '@/components/about/AboutEntry.vue'
 
 const router = createRouter({
-  history: createWebHistory(),
+  history: createWebHashHistory(),
   routes: [
     {
       path: '/',
