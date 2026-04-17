@@ -310,10 +310,8 @@ const remoteVideoRefs = ref<Map<string, HTMLVideoElement>>(new Map())
 const showSettings = ref(false)
 const isPublishing = ref(false)
 const isJoiningRoom = ref(false)
-const sysInfo = ref<Dty.SysInfoData | null>(null)
 const rtcApi = createRtcApi()
 let roomInfoTimer: number | null = null
-let heartBeatTimer: number | null = null
 let keepAliveTimer: number | null = null
 
 const roomState = reactive({
@@ -394,7 +392,6 @@ const handleJoinRoom = async () => {
     showToast('Joined room successfully!', 'success')
     
     generateLocalStreamId()
-    startHeartBeat()
     startKeepAlive()
     
     eventBus.on('room_event', handleRoomEvent)
@@ -415,7 +412,6 @@ const handleJoinRoom = async () => {
       showToast('Reconnected to room successfully!', 'success')
       
       generateLocalStreamId()
-      startHeartBeat()
       startKeepAlive()
       
       eventBus.on('room_event', handleRoomEvent)
@@ -440,7 +436,6 @@ onMounted(async () => {
 
 onUnmounted(async () => {
   stopRoomInfoPolling()
-  stopHeartBeat()
   stopKeepAlive()
   stopPublish()
   stopLocalCamera()
@@ -669,30 +664,6 @@ const stopRoomInfoPolling = () => {
   if (roomInfoTimer !== null) {
     clearInterval(roomInfoTimer)
     roomInfoTimer = null
-  }
-}
-
-const sendHeartBeat = async () => {
-  try {
-    const info = await rtcApi.sendHeartBeat()
-    sysInfo.value = info
-    console.log('Heart beat sent:', info.heartBeatInfo)
-  } catch (error) {
-    console.error('Error sending heart beat:', error)
-  }
-}
-
-const startHeartBeat = () => {
-  sendHeartBeat()
-  heartBeatTimer = window.setInterval(() => {
-    sendHeartBeat()
-  }, 30000)
-}
-
-const stopHeartBeat = () => {
-  if (heartBeatTimer !== null) {
-    clearInterval(heartBeatTimer)
-    heartBeatTimer = null
   }
 }
 

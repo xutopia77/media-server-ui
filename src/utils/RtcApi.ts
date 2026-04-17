@@ -232,25 +232,6 @@ export class RtcApi {
     }
   }
 
-  async sendHeartBeat(): Promise<Dty.SysInfoData> {
-    try {
-      const request: Dty.HeartBeatRequest = {
-        cmd: 'heart_beat'
-      }
-
-      const response = await axios.post<Dty.SysInfoResponse>('/api/v1/sys_info', request)
-
-      if (response.data.code !== 200) {
-        throw new Error('Heart beat failed')
-      }
-
-      return response.data.data
-    } catch (error) {
-      console.error('Error sending heart beat:', error)
-      throw error
-    }
-  }
-
   async startPlay(options: Dty.PlayOptions): Promise<MediaStream> {
     console.log('=== startPlay start ===')
     console.log('Play options:', options)

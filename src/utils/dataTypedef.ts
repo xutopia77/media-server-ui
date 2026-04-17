@@ -189,30 +189,6 @@ export interface KeepAliveResponse {
   desc: string
 }
 
-export interface HeartBeatInfo {
-  heartCnt: number
-  time: string
-  version: string
-}
-
-export interface GbInfo {
-  users: string[]
-}
-
-export interface RoomData {
-  users: RoomUser[]
-}
-
-export interface SysInfoData {
-  gb: GbInfo
-  heartBeatInfo: HeartBeatInfo
-  rooms: RoomData[]
-}
-
-export interface HeartBeatRequest {
-  cmd: string
-}
-
 export interface RoomEventData {
   eventType: string
   roomId: string
@@ -229,11 +205,4 @@ export interface RoomEventData {
     }
     users: RoomUser[]
   }
-}
-
-
-export interface SysInfoResponse {
-  code: number
-  data: SysInfoData
-  status: string
 }
