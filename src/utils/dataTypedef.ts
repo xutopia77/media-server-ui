@@ -155,6 +155,40 @@ export interface RoomResponse {
   status: string
 }
 
+export interface JoinRoomRequest {
+  roomId: string
+  uid: string
+  nickname?: string
+}
+
+export interface JoinRoomResponse {
+  code: number
+  status: string
+  desc: string
+}
+
+export interface LeaveRoomRequest {
+  roomId: string
+  uid: string
+}
+
+export interface LeaveRoomResponse {
+  code: number
+  status: string
+  desc: string
+}
+
+export interface KeepAliveRequest {
+  roomId: string
+  uid: string
+}
+
+export interface KeepAliveResponse {
+  code: number
+  status: string
+  desc: string
+}
+
 export interface HeartBeatInfo {
   heartCnt: number
   time: string

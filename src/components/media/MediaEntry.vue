@@ -5,6 +5,12 @@
       <div class="user-sidebar">
         <div class="sidebar-header">
           <h2>Participants</h2>
+          <div class="room-info">
+            <span class="room-id">Room: {{ roomState.roomId }}</span>
+            <span class="room-status" :class="{ joined: isJoinedRoom }">
+              {{ isJoinedRoom ? '🟢 Joined' : '🔴 Not Joined' }}
+            </span>
+          </div>
           <span class="user-count">{{ users.length }} online</span>
         </div>
         <div class="user-list">
@@ -45,22 +51,43 @@
 
       <div class="video-area">
         <div class="video-header">
-          <h1>Video Chat</h1>
+          <div class="video-header-left">
+            <button 
+              v-if="!isJoinedRoom" 
+              class="join-room-btn" 
+              @click="handleJoinRoom"
+              :disabled="isJoiningRoom"
+            >
+              {{ isJoiningRoom ? 'Joining...' : 'Join Room' }}
+            </button>
+            <h1 v-else>Video Chat</h1>
+          </div>
           <div class="video-controls">
-            <button class="control-btn" title="Mute">
-              <span class="icon">🎤</span>
-            </button>
-            <button class="control-btn" title="Camera">
-              <span class="icon">📹</span>
-            </button>
-            <button class="control-btn" title="Share Screen">
-              <span class="icon">🖥️</span>
-            </button>
-            <button class="control-btn" title="Publish Stream" @click="togglePublish">
-              <span class="icon">{{ isPublishing ? '🛑' : '📡' }}</span>
-            </button>
+            <template v-if="isJoinedRoom">
+              <button class="control-btn" title="Mute">
+                <span class="icon">🎤</span>
+                <span class="label">Mute</span>
+              </button>
+              <button class="control-btn" title="Camera">
+                <span class="icon">📹</span>
+                <span class="label">Camera</span>
+              </button>
+              <button class="control-btn" title="Share Screen">
+                <span class="icon">🖥️</span>
+                <span class="label">Screen</span>
+              </button>
+              <button class="control-btn" title="Publish Stream" @click="togglePublish">
+                <span class="icon">{{ isPublishing ? '🛑' : '📡' }}</span>
+                <span class="label">{{ isPublishing ? 'Stop' : 'Publish' }}</span>
+              </button>
+            </template>
             <button class="control-btn" title="Settings" @click="toggleSettings">
               <span class="icon">⚙️</span>
+              <span class="label">Settings</span>
+            </button>
+            <button v-if="isJoinedRoom" class="control-btn leave-btn" title="Leave Room" @click="handleLeaveRoom">
+              <span class="icon">🚪</span>
+              <span class="label">Leave</span>
             </button>
           </div>
         </div>
@@ -213,13 +240,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, reactive } from 'vue'
+import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import NavBar from '../NavBar.vue'
 import { createRtcApi } from '@/utils/RtcApi'
 import * as Dty from '@/utils/dataTypedef'
 import { useToast } from '@/composables/useToast'
 import { eventBus } from '@/utils/eventBus'
 
+const route = useRoute()
+const router = useRouter()
 const { showToast } = useToast()
 
 interface User {
@@ -279,10 +309,21 @@ const localVideoRef = ref<HTMLVideoElement | null>(null)
 const remoteVideoRefs = ref<Map<string, HTMLVideoElement>>(new Map())
 const showSettings = ref(false)
 const isPublishing = ref(false)
+const isJoiningRoom = ref(false)
 const sysInfo = ref<Dty.SysInfoData | null>(null)
 const rtcApi = createRtcApi()
 let roomInfoTimer: number | null = null
 let heartBeatTimer: number | null = null
+let keepAliveTimer: number | null = null
+
+const roomState = reactive({
+  joined: false,
+  roomId: '2001',
+  uid: '',
+  nickname: ''
+})
+
+const isJoinedRoom = computed(() => roomState.joined)
 
 const settings = reactive<WebRTCSettings>({
   cameraDevice: '',
@@ -325,21 +366,99 @@ const saveSettings = () => {
   showSettings.value = false
 }
 
-onMounted(() => {
-  generateLocalStreamId()
-  startLocalCamera()
-  startHeartBeat()
+const generateUid = () => {
+  const timestamp = Date.now()
+  const random = Math.floor(Math.random() * 10000)
+  return `user_${timestamp}_${random}`
+}
+
+const handleJoinRoom = async () => {
+  if (isJoiningRoom.value) {
+    return
+  }
+
+  isJoiningRoom.value = true
   
+  if (!roomState.uid) {
+    roomState.uid = generateUid()
+  }
+
+  try {
+    await rtcApi.joinRoom({
+      roomId: roomState.roomId,
+      uid: roomState.uid,
+      nickname: roomState.nickname || undefined
+    })
+    
+    roomState.joined = true
+    showToast('Joined room successfully!', 'success')
+    
+    generateLocalStreamId()
+    startHeartBeat()
+    startKeepAlive()
+    
+    eventBus.on('room_event', handleRoomEvent)
+    
+    try {
+      await startLocalCamera()
+    } catch (cameraError) {
+      console.error('Camera access failed:', cameraError)
+      showToast('Camera access failed, but you can still participate', 'warning')
+    }
+  } catch (error) {
+    console.error('Failed to join room:', error)
+    const errorMsg = (error as Error).message || 'Unknown error'
+    
+    if (errorMsg.includes('already in room')) {
+      console.log('User already in room, continuing...')
+      roomState.joined = true
+      showToast('Reconnected to room successfully!', 'success')
+      
+      generateLocalStreamId()
+      startHeartBeat()
+      startKeepAlive()
+      
+      eventBus.on('room_event', handleRoomEvent)
+      
+      try {
+        await startLocalCamera()
+      } catch (cameraError) {
+        console.error('Camera access failed:', cameraError)
+        showToast('Camera access failed, but you can still participate', 'warning')
+      }
+    } else {
+      showToast('Failed to join room: ' + errorMsg, 'error')
+    }
+  } finally {
+    isJoiningRoom.value = false
+  }
+}
+
+onMounted(async () => {
   eventBus.on('room_event', handleRoomEvent)
 })
 
-onUnmounted(() => {
+onUnmounted(async () => {
   stopRoomInfoPolling()
   stopHeartBeat()
+  stopKeepAlive()
   stopPublish()
   stopLocalCamera()
   
   eventBus.off('room_event', handleRoomEvent)
+  
+  if (roomState.joined) {
+    try {
+      await rtcApi.leaveRoom({
+        roomId: roomState.roomId,
+        uid: roomState.uid
+      })
+      roomState.joined = false
+      console.log('Left room successfully')
+    } catch (error) {
+      console.error('Failed to leave room:', error)
+    }
+  }
 })
 
 const handleRoomEvent = (data: unknown) => {
@@ -503,7 +622,7 @@ const startPublish = async () => {
     }
 
     const sessionId = await rtcApi.startPublish(stream, {
-      streamurl: `webrtc://localhost/2001/${localUser.streamId}`,
+      streamurl: `webrtc://localhost/${roomState.roomId}/${localUser.streamId}`,
       clientip: '127.0.0.1'
     })
 
@@ -523,6 +642,27 @@ const stopPublish = () => {
   showToast('Publish stopped', 'info')
 }
 
+const handleLeaveRoom = async () => {
+  try {
+    if (isPublishing.value) {
+      stopPublish()
+    }
+    
+    stopLocalCamera()
+    
+    await rtcApi.leaveRoom({
+      roomId: roomState.roomId,
+      uid: roomState.uid
+    })
+    
+    roomState.joined = false
+    showToast('Left room successfully', 'success')
+    router.push('/room')
+  } catch (error) {
+    console.error('Error leaving room:', error)
+    showToast('Failed to leave room: ' + (error as Error).message, 'error')
+  }
+}
 
 
 const stopRoomInfoPolling = () => {
@@ -556,6 +696,35 @@ const stopHeartBeat = () => {
   }
 }
 
+const sendKeepAlive = async () => {
+  if (!roomState.joined) {
+    return
+  }
+  
+  try {
+    await rtcApi.keepAlive({
+      roomId: roomState.roomId,
+      uid: roomState.uid
+    })
+  } catch (error) {
+    console.error('Error sending keep alive:', error)
+  }
+}
+
+const startKeepAlive = () => {
+  sendKeepAlive()
+  keepAliveTimer = window.setInterval(() => {
+    sendKeepAlive()
+  }, 10000)
+}
+
+const stopKeepAlive = () => {
+  if (keepAliveTimer !== null) {
+    clearInterval(keepAliveTimer)
+    keepAliveTimer = null
+  }
+}
+
 const callUser = async (user: User) => {
   console.log('=== callUser start ===')
   console.log('User info:', user)
@@ -571,7 +740,7 @@ const callUser = async (user: User) => {
     callingUsers.value.add(user.id)
     console.log('Added to callingUsers:', user.id)
 
-    const streamurl = `webrtc://localhost/2001/${user.streamId}`
+    const streamurl = `webrtc://localhost/${roomState.roomId}/${user.streamId}`
     console.log('Preparing to play, streamurl:', streamurl)
 
     const existingRemoteUser = remoteUsers.value.find(u => u.id === user.id)
@@ -741,8 +910,8 @@ const handleFilePlayStop = async () => {
   padding: 20px;
   border-bottom: 1px solid #3c3c3c;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .sidebar-header h2 {
@@ -752,6 +921,28 @@ const handleFilePlayStop = async () => {
   color: #ffffff;
 }
 
+.room-info {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.room-id {
+  font-size: 13px;
+  color: #888;
+  font-weight: 500;
+}
+
+.room-status {
+  font-size: 12px;
+  color: #f44336;
+  font-weight: 500;
+}
+
+.room-status.joined {
+  color: #4caf50;
+}
+
 .user-count {
   font-size: 12px;
   color: #0e639c;
@@ -759,6 +950,7 @@ const handleFilePlayStop = async () => {
   padding: 4px 8px;
   border-radius: 10px;
   font-weight: 500;
+  width: fit-content;
 }
 
 .user-list {
@@ -902,11 +1094,38 @@ const handleFilePlayStop = async () => {
   background-color: #252526;
 }
 
+.video-header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .video-header h1 {
   font-size: 20px;
   font-weight: 500;
   margin: 0;
   color: #ffffff;
+}
+
+.join-room-btn {
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: 500;
+  color: #ffffff;
+  background-color: #0e639c;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.join-room-btn:hover:not(:disabled) {
+  background-color: #1177bb;
+}
+
+.join-room-btn:disabled {
+  background-color: #555;
+  cursor: not-allowed;
 }
 
 .video-controls {
@@ -915,16 +1134,19 @@ const handleFilePlayStop = async () => {
 }
 
 .control-btn {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+  min-width: 60px;
+  height: auto;
+  padding: 8px 12px;
+  border-radius: 4px;
   border: 1px solid #3c3c3c;
   background-color: #3c3c3c;
   color: #cccccc;
   cursor: pointer;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   transition: all 0.15s;
 }
 
@@ -935,7 +1157,24 @@ const handleFilePlayStop = async () => {
 }
 
 .control-btn .icon {
-  font-size: 18px;
+  font-size: 20px;
+  line-height: 1;
+}
+
+.control-btn .label {
+  font-size: 11px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.control-btn.leave-btn {
+  background-color: #5a1d1d;
+  border-color: #7a2d2d;
+}
+
+.control-btn.leave-btn:hover {
+  background-color: #7a2d2d;
+  border-color: #9a3d3d;
 }
 
 .settings-panel {

@@ -5,6 +5,11 @@
       <h1>Welcome to Media Server</h1>
       <p class="description">Select a feature from the navigation menu to get started</p>
       <div class="feature-cards">
+        <div class="feature-card" @click="goToMedia">
+          <div class="feature-icon">📹</div>
+          <h2>Video Chat</h2>
+          <p>Join a room to start video chatting with others</p>
+        </div>
         <div class="feature-card" @click="goToFlv">
           <div class="feature-icon">📺</div>
           <h2>FLV Player</h2>
@@ -20,6 +25,10 @@ import { useRouter } from 'vue-router'
 import NavBar from './NavBar.vue'
 
 const router = useRouter()
+
+const goToMedia = () => {
+  router.push('/media')
+}
 
 const goToFlv = () => {
   router.push('/flv')

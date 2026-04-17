@@ -9,6 +9,7 @@ export class RtcApi {
   private playPeerConnection: RTCPeerConnection | null = null
   private playStream: MediaStream | null = null
   private playSessionId: string | null = null
+  private currentRoom: { roomId: string; uid: string } | null = null
 
   async startCamera(options: Dty.CameraOptions = {}): Promise<MediaStream> {
     const defaultOptions: Dty.CameraOptions = {
@@ -169,6 +170,64 @@ export class RtcApi {
       return response.data.data
     } catch (error) {
       console.error('Error getting room info:', error)
+      throw error
+    }
+  }
+
+  async joinRoom(request: Dty.JoinRoomRequest): Promise<void> {
+    if (this.currentRoom && 
+        this.currentRoom.roomId === request.roomId && 
+        this.currentRoom.uid === request.uid) {
+      console.log('Already in room, skipping join request:', request.roomId, request.uid)
+      return
+    }
+
+    try {
+      const response = await axios.post<Dty.JoinRoomResponse>('/api/v1/rtc/room/join', request)
+
+      if (response.data.code !== 0) {
+        const errorMsg = response.data.desc || 'Join room failed'
+        if (errorMsg.includes('already in room')) {
+          console.log('User already in room, considering as success:', request.roomId, request.uid)
+          this.currentRoom = { roomId: request.roomId, uid: request.uid }
+          return
+        }
+        throw new Error(errorMsg)
+      }
+
+      this.currentRoom = { roomId: request.roomId, uid: request.uid }
+      console.log('Join room successful:', request.roomId, request.uid)
+    } catch (error) {
+      console.error('Error joining room:', error)
+      throw error
+    }
+  }
+
+  async leaveRoom(request: Dty.LeaveRoomRequest): Promise<void> {
+    try {
+      const response = await axios.post<Dty.LeaveRoomResponse>('/api/v1/rtc/room/leave', request)
+
+      if (response.data.code !== 0) {
+        throw new Error(response.data.desc || 'Leave room failed')
+      }
+
+      this.currentRoom = null
+      console.log('Leave room successful:', request.roomId, request.uid)
+    } catch (error) {
+      console.error('Error leaving room:', error)
+      throw error
+    }
+  }
+
+  async keepAlive(request: Dty.KeepAliveRequest): Promise<void> {
+    try {
+      const response = await axios.post<Dty.KeepAliveResponse>('/api/v1/rtc/room/keepalive', request)
+
+      if (response.data.code !== 0) {
+        throw new Error(response.data.desc || 'Keep alive failed')
+      }
+    } catch (error) {
+      console.error('Error sending keep alive:', error)
       throw error
     }
   }
@@ -386,6 +445,11 @@ export class RtcApi {
   }
 }
 
+let rtcApiInstance: RtcApi | null = null
+
 export const createRtcApi = (): RtcApi => {
-  return new RtcApi()
+  if (!rtcApiInstance) {
+    rtcApiInstance = new RtcApi()
+  }
+  return rtcApiInstance
 }
