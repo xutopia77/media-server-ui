@@ -39,6 +39,31 @@ export const useRoomStore = defineStore('room', () => {
     streamId: uid
   })
 
+  const handleRoomEvent = (data: unknown) => {
+    const eventData = data as { eventType: string; roomId: string; uid: string; data: { user?: Partial<RoomUser>; users?: RoomUser[] } }
+
+    if (!eventData) return
+
+    const { eventType, data: roomData } = eventData
+
+    switch (eventType) {
+      case 'UserJoin':
+      case 'UserLeave':
+      case 'PublishStart':
+      case 'PublishStop':
+      case 'SubscribeStart':
+      case 'SubscribeStop':
+        if (roomData?.users) {
+          updateUserList(roomData.users)
+        }
+        break
+      default:
+        break
+    }
+  }
+
+  eventBus.on('room_event', handleRoomEvent)
+
   const joinRoom = async (roomId: string, nickname?: string, uid?: string) => {
     if (isJoining.value) {
       return { success: false, error: 'Already joining room' }
@@ -70,8 +95,6 @@ export const useRoomStore = defineStore('room', () => {
 
       startKeepAlive(roomId, finalUid)
 
-      eventBus.on('room_event', handleRoomEvent)
-
       return { success: true, uid: finalUid }
     } catch (err) {
       const errorMsg = (err as Error).message || 'Unknown error'
@@ -88,7 +111,6 @@ export const useRoomStore = defineStore('room', () => {
         isJoined.value = true
 
         startKeepAlive(roomId, finalUid)
-        eventBus.on('room_event', handleRoomEvent)
 
         return { success: true, uid: finalUid, message: 'Reconnected to room' }
       }
@@ -133,7 +155,6 @@ export const useRoomStore = defineStore('room', () => {
     users.value = []
     isJoined.value = false
     error.value = null
-    eventBus.off('room_event', handleRoomEvent)
   }
 
   const startKeepAlive = (roomId: string, uid: string) => {
@@ -160,37 +181,22 @@ export const useRoomStore = defineStore('room', () => {
     }
   }
 
-  const handleRoomEvent = (data: unknown) => {
-    const eventData = data as { eventType: string; roomId: string; uid: string; data: { user?: Partial<RoomUser>; users?: RoomUser[] } }
-
-    if (!eventData) return
-
-    const { eventType, data: roomData } = eventData
-
-    switch (eventType) {
-      case 'UserJoin':
-      case 'UserLeave':
-      case 'PublishStart':
-      case 'PublishStop':
-      case 'SubscribeStart':
-      case 'SubscribeStop':
-        if (roomData?.users) {
-          updateUserList(roomData.users)
-        }
-        break
-      default:
-        break
-    }
-  }
-
   const updateUserList = (newUsers: RoomUser[]) => {
     if (!currentUser.value) return
 
-    const localUser = users.value.find(u => u.uid === currentUser.value?.uid)
+    const myUid = currentUser.value.uid
+
+    const filteredUsers = newUsers.filter(u => {
+      const userUid = u.streamId || u.uid.split('/').pop() || u.uid
+      return userUid !== myUid
+    })
 
     users.value = [
-      localUser || createLocalUser(currentUser.value.uid, currentUser.value.roomId),
-      ...newUsers.filter(u => u.uid !== currentUser.value?.uid)
+      createLocalUser(myUid, currentUser.value.roomId),
+      ...filteredUsers.map(u => ({
+        ...u,
+        uid: u.streamId || u.uid.split('/').pop() || u.uid
+      }))
     ]
 
     if (currentRoom.value) {

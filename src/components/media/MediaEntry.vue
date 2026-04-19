@@ -87,6 +87,10 @@
                 <span class="label">Leave</span>
               </button>
             </template>
+            <button class="control-btn" title="Settings" @click="toggleSettings" :disabled="!roomStore.isJoined">
+              <span class="icon">⚙️</span>
+              <span class="label">Settings</span>
+            </button>
           </div>
         </div>
 
@@ -469,7 +473,6 @@ const handleLeaveRoom = async () => {
   
   if (result.success) {
     showToast('Left room successfully', 'success')
-    router.push('/room')
   } else {
     showToast('Failed to leave room: ' + (result.error || 'Unknown error'), 'error')
   }

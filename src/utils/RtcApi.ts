@@ -175,12 +175,7 @@ export class RtcApi {
   }
 
   async joinRoom(request: Dty.JoinRoomRequest): Promise<void> {
-    if (this.currentRoom && 
-        this.currentRoom.roomId === request.roomId && 
-        this.currentRoom.uid === request.uid) {
-      console.log('Already in room, skipping join request:', request.roomId, request.uid)
-      return
-    }
+    this.currentRoom = null
 
     try {
       const response = await axios.post<Dty.JoinRoomResponse>('/api/v1/rtc/room/join', request)
