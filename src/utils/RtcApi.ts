@@ -174,59 +174,6 @@ export class RtcApi {
     }
   }
 
-  async joinRoom(request: Dty.JoinRoomRequest): Promise<void> {
-    this.currentRoom = null
-
-    try {
-      const response = await axios.post<Dty.JoinRoomResponse>('/api/v1/rtc/room/join', request)
-
-      if (response.data.code !== 0) {
-        const errorMsg = response.data.desc || 'Join room failed'
-        if (errorMsg.includes('already in room')) {
-          console.log('User already in room, considering as success:', request.roomId, request.uid)
-          this.currentRoom = { roomId: request.roomId, uid: request.uid }
-          return
-        }
-        throw new Error(errorMsg)
-      }
-
-      this.currentRoom = { roomId: request.roomId, uid: request.uid }
-      console.log('Join room successful:', request.roomId, request.uid)
-    } catch (error) {
-      console.error('Error joining room:', error)
-      throw error
-    }
-  }
-
-  async leaveRoom(request: Dty.LeaveRoomRequest): Promise<void> {
-    try {
-      const response = await axios.post<Dty.LeaveRoomResponse>('/api/v1/rtc/room/leave', request)
-
-      if (response.data.code !== 0) {
-        throw new Error(response.data.desc || 'Leave room failed')
-      }
-
-      this.currentRoom = null
-      console.log('Leave room successful:', request.roomId, request.uid)
-    } catch (error) {
-      console.error('Error leaving room:', error)
-      throw error
-    }
-  }
-
-  async keepAlive(request: Dty.KeepAliveRequest): Promise<void> {
-    try {
-      const response = await axios.post<Dty.KeepAliveResponse>('/api/v1/rtc/room/keepalive', request)
-
-      if (response.data.code !== 0) {
-        throw new Error(response.data.desc || 'Keep alive failed')
-      }
-    } catch (error) {
-      console.error('Error sending keep alive:', error)
-      throw error
-    }
-  }
-
   async startPlay(options: Dty.PlayOptions): Promise<MediaStream> {
     console.log('=== startPlay start ===')
     console.log('Play options:', options)

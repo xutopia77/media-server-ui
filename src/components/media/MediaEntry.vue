@@ -4,36 +4,14 @@
     <div class="video-chat-container">
       <div class="user-sidebar">
         <div class="sidebar-header">
-          <div class="header-section user-section">
-            <div class="my-user-info">
-              <span class="info-label">My ID:</span>
-              <span class="info-value">{{ myUid }}</span>
-            </div>
-            <div class="room-info">
-              <span class="info-label">Room:</span>
-              <span class="info-value">{{ roomStore.currentRoom?.roomId || '2001' }}</span>
-              <span class="room-status" :class="{ joined: roomStore.isJoined }">
-                {{ roomStore.isJoined ? '🟢' : '🔴' }}
-              </span>
-            </div>
-            <div v-if="!roomStore.isJoined" class="sidebar-actions">
-              <button 
-                class="join-room-btn" 
-                @click="handleJoinRoom"
-                :disabled="roomStore.isJoining"
-              >
-                {{ roomStore.isJoining ? 'Joining...' : 'Join Room' }}
-              </button>
-            </div>
-          </div>
           <div class="header-section participants-section">
-            <h2>Participants</h2>
-            <span class="user-count">{{ otherUsers.length }} online</span>
+            <h2>Publishers</h2>
+            <span class="user-count">{{ roomStore.userCount }} online</span>
           </div>
         </div>
         <div class="user-list">
           <div
-            v-for="user in otherUsers"
+            v-for="user in roomStore.users"
             :key="user.uid"
             class="user-item remote-user"
           >
@@ -54,10 +32,10 @@
                 </span>
                 <button
                   class="call-btn"
-                  @click="callUser(user)"
-                  :disabled="isCallingUser(user.uid)"
+                  @click="playUser(user)"
+                  :disabled="isPlayingUser(user.uid)"
                 >
-                  {{ isCallingUser(user.uid) ? 'Calling...' : 'Call' }}
+                  {{ isPlayingUser(user.uid) ? 'Playing...' : 'Play' }}
                 </button>
               </div>
             </div>
@@ -71,27 +49,23 @@
             <h1>Video Chat</h1>
           </div>
           <div class="video-controls">
-            <button class="control-btn" :class="{ active: isCameraOn }" :disabled="!roomStore.isJoined" title="Camera" @click="toggleCamera">
+            <button class="control-btn" :class="{ active: isCameraOn }" title="Camera" @click="toggleCamera">
               <span class="icon">{{ isCameraOn ? '📹' : '📷' }}</span>
               <span class="label">{{ isCameraOn ? 'Camera Off' : 'Camera On' }}</span>
             </button>
-            <button class="control-btn" :disabled="!roomStore.isJoined" title="Mute">
+            <button class="control-btn" title="Mute">
               <span class="icon">🎤</span>
               <span class="label">Mute</span>
             </button>
-            <button class="control-btn" :disabled="!roomStore.isJoined" title="Share Screen">
+            <button class="control-btn" title="Share Screen">
               <span class="icon">🖥️</span>
               <span class="label">Screen</span>
             </button>
-            <button class="control-btn" :class="{ active: isPublishing }" :disabled="!roomStore.isJoined || !isCameraOn" title="Publish Stream" @click="togglePublish">
+            <button class="control-btn" :class="{ active: isPublishing }" :disabled="!isCameraOn" title="Publish Stream" @click="togglePublish">
               <span class="icon">{{ isPublishing ? '🛑' : '📡' }}</span>
               <span class="label">{{ isPublishing ? 'Stop' : 'Publish' }}</span>
             </button>
-            <button class="control-btn leave-btn" :disabled="!roomStore.isJoined" title="Leave Room" @click="handleLeaveRoom">
-              <span class="icon">🚪</span>
-              <span class="label">Leave</span>
-            </button>
-            <button class="control-btn" title="Settings" @click="toggleSettings" :disabled="!roomStore.isJoined">
+            <button class="control-btn" title="Settings" @click="toggleSettings">
               <span class="icon">⚙️</span>
               <span class="label">Settings</span>
             </button>
@@ -152,78 +126,93 @@
               </div>
               <div class="setting-item">
                 <label>Noise Cancellation</label>
-                <div class="toggle-switch">
-                  <input type="checkbox" id="noiseCancellation" v-model="settings.noiseCancellation">
-                  <label for="noiseCancellation" class="switch"></label>
-                </div>
+                <label class="toggle-switch">
+                  <input type="checkbox" v-model="settings.noiseCancellation">
+                  <span class="switch"></span>
+                </label>
               </div>
             </div>
 
             <div class="settings-section">
-              <h3>Connection Settings</h3>
+              <h3>Network Settings</h3>
               <div class="setting-item">
                 <label>ICE Servers</label>
                 <select v-model="settings.iceServers">
                   <option value="stun">STUN Only</option>
                   <option value="turn">TURN Only</option>
-                  <option value="both">STUN + TURN</option>
+                  <option value="both">Both STUN and TURN</option>
                 </select>
               </div>
               <div class="setting-item">
-                <label>Bandwidth Limit</label>
-                <select v-model="settings.bandwidthLimit">
-                  <option value="unlimited">Unlimited</option>
-                  <option value="high">High (2 Mbps)</option>
-                  <option value="medium">Medium (1 Mbps)</option>
-                  <option value="low">Low (500 Kbps)</option>
-                </select>
+                <label>Bandwidth Limit (kbps)</label>
+                <input type="number" v-model="settings.bandwidthLimit" placeholder="Unlimited">
               </div>
             </div>
 
             <div class="settings-section">
-              <h3>Backend Commands</h3>
+              <h3>Commands</h3>
               <div class="command-buttons">
-                <button class="btn btn-command" @click="handleFfmpegPublish" :disabled="isCommandLoading || !roomStore.isJoined">
-                  {{ isCommandLoading ? 'Processing...' : 'FFmpeg Publish' }}
+                <button 
+                  class="btn-command" 
+                  @click="handleFfmpegPublish"
+                  :disabled="isCommandLoading"
+                >
+                  FFmpeg Publish
                 </button>
-                <button class="btn btn-command" @click="handleRtmpPublish" :disabled="isCommandLoading || !roomStore.isJoined">
-                  {{ isCommandLoading ? 'Processing...' : 'RTMP Publish' }}
+                <button 
+                  class="btn-command" 
+                  @click="handleRtmpPublish"
+                  :disabled="isCommandLoading"
+                >
+                  RTMP Publish
                 </button>
-                <button class="btn btn-command" @click="handleRtmpPlay" :disabled="isCommandLoading || !roomStore.isJoined">
-                  {{ isCommandLoading ? 'Processing...' : 'RTMP Play' }}
+                <button 
+                  class="btn-command" 
+                  @click="handleRtmpPlay"
+                  :disabled="isCommandLoading"
+                >
+                  RTMP Play
                 </button>
-                <button class="btn btn-command" @click="handleFilePlay" :disabled="isCommandLoading || !roomStore.isJoined">
-                  {{ isCommandLoading ? 'Processing...' : 'File Play' }}
+                <button 
+                  class="btn-command" 
+                  @click="handleFilePlay"
+                  :disabled="isCommandLoading"
+                >
+                  File Play
                 </button>
-                <button class="btn btn-command btn-danger" @click="handleFilePlayStop" :disabled="isCommandLoading || !roomStore.isJoined">
-                  {{ isCommandLoading ? 'Processing...' : 'File Play Stop' }}
+                <button 
+                  class="btn-command btn-danger" 
+                  @click="handleFilePlayStop"
+                  :disabled="isCommandLoading"
+                >
+                  Stop File Play
                 </button>
               </div>
             </div>
           </div>
           <div class="settings-footer">
-            <button class="btn btn-secondary" @click="resetSettings">Reset to Default</button>
-            <button class="btn btn-primary" @click="saveSettings">Save Settings</button>
+            <button class="btn btn-secondary" @click="resetSettings">Reset</button>
+            <button class="btn btn-primary" @click="saveSettings">Save</button>
           </div>
         </div>
 
         <div class="video-grid">
-          <div class="video-card local-video">
+          <div v-if="isCameraOn" class="video-card local-video">
             <video ref="localVideoRef" autoplay muted playsinline></video>
-            <div class="video-label">You</div>
+            <div class="video-label">Local ({{ myUid }})</div>
             <div class="video-status">
               <span class="status-dot"></span>
-              Local Camera
+              {{ isPublishing ? 'Publishing' : 'Preview' }}
             </div>
           </div>
 
           <div
             v-for="remoteUser in remoteUsers"
             :key="remoteUser.uid"
-            class="video-card remote-video"
+            class="video-card"
           >
             <video
-              :ref="(el: any) => setRemoteVideoRef(el, remoteUser.uid)"
+              :ref="el => setRemoteVideoRef(el as HTMLVideoElement | null, remoteUser.uid)"
               autoplay
               playsinline
             ></video>
@@ -234,10 +223,10 @@
             </div>
           </div>
 
-          <div v-if="remoteUsers.length === 0" class="no-participants">
+          <div v-if="!isCameraOn && remoteUsers.length === 0" class="no-participants">
             <div class="no-participants-icon">👥</div>
-            <h3>No Participants</h3>
-            <p>Waiting for others to join the video chat...</p>
+            <h3>No Publishers</h3>
+            <p>Start camera and publish, or wait for others to publish...</p>
           </div>
         </div>
       </div>
@@ -246,21 +235,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, reactive, computed } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onUnmounted, reactive } from 'vue'
 import NavBar from '../NavBar.vue'
 import { useRoomStore } from '@/stores/room'
 import type { RoomUser } from '@/utils/dataTypedef'
 import { useToast } from '@/composables/useToast'
-import { eventBus } from '@/utils/eventBus'
 
-const router = useRouter()
 const { showToast } = useToast()
 const roomStore = useRoomStore()
 
-const myUid = ref(roomStore.generateUid())
-
-const otherUsers = computed(() => roomStore.users.filter(u => u.uid !== roomStore.currentUser?.uid))
+const myUid = ref(crypto.randomUUID())
 
 interface RemoteUser extends RoomUser {
   videoStream?: MediaStream
@@ -278,7 +262,7 @@ interface WebRTCSettings {
 }
 
 const remoteUsers = ref<RemoteUser[]>([])
-const callingUsers = ref<Set<string>>(new Set())
+const playingUsers = ref<Set<string>>(new Set())
 
 const localVideoRef = ref<HTMLVideoElement | null>(null)
 const remoteVideoRefs = ref<Map<string, HTMLVideoElement>>(new Map())
@@ -317,73 +301,6 @@ const resetSettings = () => {
 const saveSettings = () => {
   console.log('Settings saved:', settings)
   showSettings.value = false
-}
-
-const handleJoinRoom = async () => {
-  const result = await roomStore.joinRoom('2001', undefined, myUid.value)
-  
-  if (result.success) {
-    showToast(result.message || 'Joined room successfully!', 'success')
-  } else {
-    showToast('Failed to join room: ' + (result.error || 'Unknown error'), 'error')
-  }
-}
-
-onMounted(async () => {
-  eventBus.on('room_event', handleRoomEvent)
-})
-
-onUnmounted(async () => {
-  stopPublish()
-  stopLocalCamera()
-  
-  eventBus.off('room_event', handleRoomEvent)
-  
-  if (roomStore.isJoined) {
-    await roomStore.leaveRoom()
-  }
-})
-
-const handleRoomEvent = (data: unknown) => {
-  const eventData = data as { eventType: string; roomId: string; uid: string; data: { user?: Partial<RoomUser>; users?: RoomUser[] } }
-  
-  if (!eventData) return
-  
-  const { eventType, data: roomData } = eventData
-  const { user } = roomData || {}
-  
-  switch (eventType) {
-    case 'UserJoin':
-      showToast(`User ${user?.streamId || user?.uid || 'Unknown'} joined the room`, 'info')
-      break
-      
-    case 'UserLeave':
-      showToast(`User ${user?.streamId || user?.uid || 'Unknown'} left the room`, 'info')
-      break
-      
-    case 'PublishStart':
-      showToast(`User ${user?.streamId || user?.uid || 'Unknown'} started publishing`, 'info')
-      break
-      
-    case 'PublishStop':
-      showToast(`User ${user?.streamId || user?.uid || 'Unknown'} stopped publishing`, 'info')
-      break
-      
-    case 'SubscribeStart':
-      showToast(`User ${user?.streamId || user?.uid || 'Unknown'} started subscribing`, 'info')
-      break
-      
-    case 'SubscribeStop':
-      showToast(`User ${user?.streamId || user?.uid || 'Unknown'} stopped subscribing`, 'info')
-      break
-      
-    default:
-      break
-  }
-  
-  if (roomData?.users && Array.isArray(roomData.users)) {
-    roomStore.updateUserList(roomData.users)
-  }
 }
 
 const startLocalCamera = async () => {
@@ -452,16 +369,9 @@ const startPublish = async () => {
       return
     }
 
-    const currentUser = roomStore.currentUser
-    if (!currentUser || !currentUser.streamId) {
-      console.error('No local streamId available')
-      showToast('Local streamId is not available', 'warning')
-      return
-    }
-
-    const roomId = roomStore.currentRoom?.roomId || '2001'
+    const roomId = '2001'
     const sessionId = await rtcApi.startPublish(stream, {
-      streamurl: `webrtc://localhost/${roomId}/${currentUser.streamId}`,
+      streamurl: `webrtc://localhost/${roomId}/${myUid.value}`,
       clientip: '127.0.0.1'
     })
 
@@ -482,24 +392,8 @@ const stopPublish = () => {
   showToast('Publish stopped', 'info')
 }
 
-const handleLeaveRoom = async () => {
-  if (isPublishing.value) {
-    stopPublish()
-  }
-  
-  stopLocalCamera()
-  
-  const result = await roomStore.leaveRoom()
-  
-  if (result.success) {
-    showToast('Left room successfully', 'success')
-  } else {
-    showToast('Failed to leave room: ' + (result.error || 'Unknown error'), 'error')
-  }
-}
-
-const callUser = async (user: RoomUser) => {
-  console.log('=== callUser start ===')
+const playUser = async (user: RoomUser) => {
+  console.log('=== playUser start ===')
   console.log('User info:', user)
   
   try {
@@ -510,10 +404,10 @@ const callUser = async (user: RoomUser) => {
     }
 
     console.log('streamId exists:', user.streamId)
-    callingUsers.value.add(user.uid)
-    console.log('Added to callingUsers:', user.uid)
+    playingUsers.value.add(user.uid)
+    console.log('Added to playingUsers:', user.uid)
 
-    const roomId = roomStore.currentRoom?.roomId || '2001'
+    const roomId = '2001'
     const streamurl = `webrtc://localhost/${roomId}/${user.streamId}`
     console.log('Preparing to play, streamurl:', streamurl)
 
@@ -550,15 +444,15 @@ const callUser = async (user: RoomUser) => {
       console.warn('Video element not found')
     }
 
-    callingUsers.value.delete(user.uid)
-    console.log('Removed from callingUsers:', user.uid)
-    console.log('=== callUser completed ===')
+    playingUsers.value.delete(user.uid)
+    console.log('Removed from playingUsers:', user.uid)
+    console.log('=== playUser completed ===')
     showToast('Play successful!', 'success')
   } catch (error) {
-    console.error('=== callUser error ===')
+    console.error('=== playUser error ===')
     console.error('Error details:', error)
-    callingUsers.value.delete(user.uid)
-    console.log('Removed from callingUsers:', user.uid)
+    playingUsers.value.delete(user.uid)
+    console.log('Removed from playingUsers:', user.uid)
     
     const errorRemoteUser = remoteUsers.value.find(u => u.uid === user.uid)
     if (errorRemoteUser && !errorRemoteUser.videoStream) {
@@ -569,8 +463,8 @@ const callUser = async (user: RoomUser) => {
   }
 }
 
-const isCallingUser = (userId: string): boolean => {
-  return callingUsers.value.has(userId)
+const isPlayingUser = (userId: string): boolean => {
+  return playingUsers.value.has(userId)
 }
 
 const handleFfmpegPublish = async () => {
@@ -607,8 +501,7 @@ const handleRtmpPlay = async () => {
   try {
     isCommandLoading.value = true
     const rtcApi = roomStore.getRtcApi()
-    const userId = roomStore.currentUser?.streamId || 'default'
-    const response = await rtcApi.startRtmpPlay(userId)
+    const response = await rtcApi.startRtmpPlay(myUid.value)
     console.log('RTMP play response:', response)
     showToast('RTMP play successful!', 'success')
   } catch (error) {
@@ -648,6 +541,11 @@ const handleFilePlayStop = async () => {
     isCommandLoading.value = false
   }
 }
+
+onUnmounted(async () => {
+  stopPublish()
+  stopLocalCamera()
+})
 </script>
 
 <style scoped>
@@ -687,11 +585,6 @@ const handleFilePlayStop = async () => {
   gap: 10px;
 }
 
-.user-section {
-  padding-bottom: 16px;
-  border-bottom: 1px solid #3c3c3c;
-}
-
 .participants-section {
   flex-direction: row;
   justify-content: space-between;
@@ -703,70 +596,6 @@ const handleFilePlayStop = async () => {
   font-weight: 500;
   margin: 0;
   color: #ffffff;
-}
-
-.my-user-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: #2a2a2a;
-  border-radius: 6px;
-}
-
-.room-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.info-label {
-  font-size: 12px;
-  color: #888;
-  font-weight: 500;
-}
-
-.info-value {
-  font-size: 13px;
-  color: #4fc3f7;
-  font-weight: 500;
-}
-
-.room-status {
-  font-size: 14px;
-}
-
-.room-status.joined {
-  color: #4caf50;
-}
-
-.sidebar-actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-top: 4px;
-}
-
-.sidebar-actions .join-room-btn {
-  padding: 8px 16px;
-  background: linear-gradient(135deg, #4caf50, #45a049);
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.sidebar-actions .join-room-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #45a049, #3d8b40);
-}
-
-.sidebar-actions .join-room-btn:disabled {
-  background: #555;
-  cursor: not-allowed;
-  opacity: 0.7;
 }
 
 .user-count {
@@ -819,18 +648,9 @@ const handleFilePlayStop = async () => {
   flex-shrink: 0;
 }
 
-.local-avatar {
-  background: linear-gradient(135deg, #0e639c, #1177bb);
-  border: 2px solid #0e639c;
-}
-
 .remote-avatar {
   background: linear-gradient(135deg, #4caf50, #66bb6a);
   border: 2px solid #4caf50;
-}
-
-.local-user {
-  border-left: 3px solid #0e639c;
 }
 
 .remote-user {
@@ -933,27 +753,6 @@ const handleFilePlayStop = async () => {
   color: #ffffff;
 }
 
-.join-room-btn {
-  padding: 12px 32px;
-  font-size: 16px;
-  font-weight: 500;
-  color: #ffffff;
-  background-color: #0e639c;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.join-room-btn:hover:not(:disabled) {
-  background-color: #1177bb;
-}
-
-.join-room-btn:disabled {
-  background-color: #555;
-  cursor: not-allowed;
-}
-
 .video-controls {
   display: flex;
   gap: 8px;
@@ -991,16 +790,6 @@ const handleFilePlayStop = async () => {
   font-size: 11px;
   line-height: 1;
   white-space: nowrap;
-}
-
-.control-btn.leave-btn {
-  background-color: #5a1d1d;
-  border-color: #7a2d2d;
-}
-
-.control-btn.leave-btn:hover {
-  background-color: #7a2d2d;
-  border-color: #9a3d3d;
 }
 
 .control-btn.active {

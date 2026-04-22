@@ -166,48 +166,11 @@ export interface RoomResponse {
   status: string
 }
 
-export interface JoinRoomRequest {
-  roomId: string
-  uid: string
-  nickname?: string
-}
-
-export interface JoinRoomResponse {
-  code: number
-  status: string
-  desc: string
-}
-
-export interface LeaveRoomRequest {
-  roomId: string
-  uid: string
-}
-
-export interface LeaveRoomResponse {
-  code: number
-  status: string
-  desc: string
-}
-
-export interface KeepAliveRequest {
-  roomId: string
-  uid: string
-}
-
-export interface KeepAliveResponse {
-  code: number
-  status: string
-  desc: string
-}
-
 export enum RoomEventType {
-  UserJoin = 'UserJoin',
-  UserLeave = 'UserLeave',
-  UserPublish = 'UserPublish',
-  UserUnpublish = 'UserUnpublish',
-  UserSubscribe = 'UserSubscribe',
-  UserUnsubscribe = 'UserUnsubscribe',
-  RoomClose = 'RoomClose'
+  PublishStart = 'PublishStart',
+  PublishStop = 'PublishStop',
+  SubscribeStart = 'SubscribeStart',
+  SubscribeStop = 'SubscribeStop'
 }
 
 export interface RoomEventData {
