@@ -4,26 +4,32 @@
     <div class="video-chat-container">
       <div class="user-sidebar">
         <div class="sidebar-header">
-          <h2>Participants</h2>
-          <div class="room-info">
-            <span class="room-id">Room: {{ roomStore.currentRoom?.roomId || '2001' }}</span>
-            <span class="room-status" :class="{ joined: roomStore.isJoined }">
-              {{ roomStore.isJoined ? '🟢 Joined' : '🔴 Not Joined' }}
-            </span>
+          <div class="header-section user-section">
+            <div class="my-user-info">
+              <span class="info-label">My ID:</span>
+              <span class="info-value">{{ myUid }}</span>
+            </div>
+            <div class="room-info">
+              <span class="info-label">Room:</span>
+              <span class="info-value">{{ roomStore.currentRoom?.roomId || '2001' }}</span>
+              <span class="room-status" :class="{ joined: roomStore.isJoined }">
+                {{ roomStore.isJoined ? '🟢' : '🔴' }}
+              </span>
+            </div>
+            <div v-if="!roomStore.isJoined" class="sidebar-actions">
+              <button 
+                class="join-room-btn" 
+                @click="handleJoinRoom"
+                :disabled="roomStore.isJoining"
+              >
+                {{ roomStore.isJoining ? 'Joining...' : 'Join Room' }}
+              </button>
+            </div>
           </div>
-          <div class="my-user-info">
-            <span class="my-uid">My ID: {{ myUid }}</span>
+          <div class="header-section participants-section">
+            <h2>Participants</h2>
+            <span class="user-count">{{ otherUsers.length }} online</span>
           </div>
-          <div v-if="!roomStore.isJoined" class="sidebar-actions">
-            <button 
-              class="join-room-btn" 
-              @click="handleJoinRoom"
-              :disabled="roomStore.isJoining"
-            >
-              {{ roomStore.isJoining ? 'Joining...' : 'Join Room' }}
-            </button>
-          </div>
-          <span class="user-count">{{ otherUsers.length }} online</span>
         </div>
         <div class="user-list">
           <div
@@ -65,28 +71,26 @@
             <h1>Video Chat</h1>
           </div>
           <div class="video-controls">
-            <template v-if="roomStore.isJoined">
-              <button class="control-btn" title="Mute">
-                <span class="icon">🎤</span>
-                <span class="label">Mute</span>
-              </button>
-              <button class="control-btn" title="Camera">
-                <span class="icon">📹</span>
-                <span class="label">Camera</span>
-              </button>
-              <button class="control-btn" title="Share Screen">
-                <span class="icon">🖥️</span>
-                <span class="label">Screen</span>
-              </button>
-              <button class="control-btn" title="Publish Stream" @click="togglePublish">
-                <span class="icon">{{ isPublishing ? '🛑' : '📡' }}</span>
-                <span class="label">{{ isPublishing ? 'Stop' : 'Publish' }}</span>
-              </button>
-              <button class="control-btn leave-btn" title="Leave Room" @click="handleLeaveRoom">
-                <span class="icon">🚪</span>
-                <span class="label">Leave</span>
-              </button>
-            </template>
+            <button class="control-btn" :class="{ active: isCameraOn }" :disabled="!roomStore.isJoined" title="Camera" @click="toggleCamera">
+              <span class="icon">{{ isCameraOn ? '📹' : '📷' }}</span>
+              <span class="label">{{ isCameraOn ? 'Camera Off' : 'Camera On' }}</span>
+            </button>
+            <button class="control-btn" :disabled="!roomStore.isJoined" title="Mute">
+              <span class="icon">🎤</span>
+              <span class="label">Mute</span>
+            </button>
+            <button class="control-btn" :disabled="!roomStore.isJoined" title="Share Screen">
+              <span class="icon">🖥️</span>
+              <span class="label">Screen</span>
+            </button>
+            <button class="control-btn" :class="{ active: isPublishing }" :disabled="!roomStore.isJoined || !isCameraOn" title="Publish Stream" @click="togglePublish">
+              <span class="icon">{{ isPublishing ? '🛑' : '📡' }}</span>
+              <span class="label">{{ isPublishing ? 'Stop' : 'Publish' }}</span>
+            </button>
+            <button class="control-btn leave-btn" :disabled="!roomStore.isJoined" title="Leave Room" @click="handleLeaveRoom">
+              <span class="icon">🚪</span>
+              <span class="label">Leave</span>
+            </button>
             <button class="control-btn" title="Settings" @click="toggleSettings" :disabled="!roomStore.isJoined">
               <span class="icon">⚙️</span>
               <span class="label">Settings</span>
@@ -281,6 +285,7 @@ const remoteVideoRefs = ref<Map<string, HTMLVideoElement>>(new Map())
 const showSettings = ref(false)
 const isPublishing = ref(false)
 const isCommandLoading = ref(false)
+const isCameraOn = ref(false)
 
 const settings = reactive<WebRTCSettings>({
   cameraDevice: '',
@@ -319,13 +324,6 @@ const handleJoinRoom = async () => {
   
   if (result.success) {
     showToast(result.message || 'Joined room successfully!', 'success')
-    
-    try {
-      await startLocalCamera()
-    } catch (cameraError) {
-      console.error('Camera access failed:', cameraError)
-      showToast('Camera access failed, but you can still participate', 'warning')
-    }
   } else {
     showToast('Failed to join room: ' + (result.error || 'Unknown error'), 'error')
   }
@@ -401,8 +399,12 @@ const startLocalCamera = async () => {
     if (localVideoRef.value) {
       localVideoRef.value.srcObject = stream
     }
+    
+    isCameraOn.value = true
+    showToast('Camera started', 'success')
   } catch (error) {
     console.error('Error accessing camera:', error)
+    showToast('Camera access failed: ' + (error as Error).message, 'error')
   }
 }
 
@@ -411,6 +413,19 @@ const stopLocalCamera = () => {
   rtcApi.stopCamera()
   if (localVideoRef.value) {
     localVideoRef.value.srcObject = null
+  }
+  isCameraOn.value = false
+}
+
+const toggleCamera = async () => {
+  if (isCameraOn.value) {
+    if (isPublishing.value) {
+      stopPublish()
+    }
+    stopLocalCamera()
+    showToast('Camera stopped', 'info')
+  } else {
+    await startLocalCamera()
   }
 }
 
@@ -423,12 +438,17 @@ const togglePublish = async () => {
 }
 
 const startPublish = async () => {
+  if (!isCameraOn.value) {
+    showToast('Please start camera first', 'warning')
+    return
+  }
+  
   try {
     const rtcApi = roomStore.getRtcApi()
     const stream = rtcApi.getStream()
     if (!stream) {
       console.error('No camera stream available')
-      showToast('Please start camera first', 'warning')
+      showToast('No camera stream available, please restart camera', 'warning')
       return
     }
 
@@ -658,7 +678,24 @@ const handleFilePlayStop = async () => {
   border-bottom: 1px solid #3c3c3c;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
+}
+
+.header-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.user-section {
+  padding-bottom: 16px;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.participants-section {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .sidebar-header h2 {
@@ -668,53 +705,55 @@ const handleFilePlayStop = async () => {
   color: #ffffff;
 }
 
+.my-user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #2a2a2a;
+  border-radius: 6px;
+}
+
 .room-info {
   display: flex;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
 }
 
-.room-id {
-  font-size: 13px;
+.info-label {
+  font-size: 12px;
   color: #888;
   font-weight: 500;
 }
 
-.room-status {
-  font-size: 12px;
-  color: #f44336;
+.info-value {
+  font-size: 13px;
+  color: #4fc3f7;
   font-weight: 500;
+}
+
+.room-status {
+  font-size: 14px;
 }
 
 .room-status.joined {
   color: #4caf50;
 }
 
-.my-user-info {
-  padding: 8px 12px;
-  background: #2a2a2a;
-  border-radius: 6px;
-}
-
-.my-uid {
-  font-size: 13px;
-  color: #4fc3f7;
-  font-weight: 500;
-}
-
 .sidebar-actions {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
+  margin-top: 4px;
 }
 
 .sidebar-actions .join-room-btn {
-  padding: 6px 12px;
+  padding: 8px 16px;
   background: linear-gradient(135deg, #4caf50, #45a049);
   color: white;
   border: none;
   border-radius: 4px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -962,6 +1001,30 @@ const handleFilePlayStop = async () => {
 .control-btn.leave-btn:hover {
   background-color: #7a2d2d;
   border-color: #9a3d3d;
+}
+
+.control-btn.active {
+  background-color: #0e639c;
+  border-color: #1177bb;
+  color: #ffffff;
+}
+
+.control-btn.active:hover {
+  background-color: #1177bb;
+  border-color: #2288cc;
+}
+
+.control-btn:disabled {
+  background-color: #2a2a2a;
+  border-color: #3c3c3c;
+  color: #666;
+  cursor: not-allowed;
+}
+
+.control-btn:disabled:hover {
+  background-color: #2a2a2a;
+  border-color: #3c3c3c;
+  color: #666;
 }
 
 .settings-panel {
