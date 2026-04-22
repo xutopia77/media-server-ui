@@ -8,6 +8,7 @@ export const useRoomStore = defineStore('room', () => {
   const rtcApi = createRtcApi()
 
   const users = ref<RoomUser[]>([])
+  const myUid = ref<string>('')
   const error = ref<string | null>(null)
 
   const userCount = computed(() => users.value.length)
@@ -28,6 +29,11 @@ export const useRoomStore = defineStore('room', () => {
     const { eventType, data: roomData } = eventData
 
     switch (eventType) {
+      case 'InitialUsers':
+        if (roomData?.users && Array.isArray(roomData.users)) {
+          setUsers(roomData.users)
+        }
+        break
       case 'PublishStart':
         if (roomData?.user) {
           addUser(roomData.user as RoomUser)
@@ -48,8 +54,14 @@ export const useRoomStore = defineStore('room', () => {
 
   eventBus.on('room_event', handleRoomEvent)
 
+  const setMyUid = (uid: string) => {
+    myUid.value = uid
+  }
+
   const addUser = (user: RoomUser) => {
     const uid = user.streamId || user.uid.split('/').pop() || user.uid
+    if (uid === myUid.value) return
+    
     const existingIndex = users.value.findIndex(u => 
       (u.streamId || u.uid.split('/').pop() || u.uid) === uid
     )
@@ -69,11 +81,16 @@ export const useRoomStore = defineStore('room', () => {
   }
 
   const setUsers = (newUsers: RoomUser[]) => {
-    users.value = newUsers.map(u => ({
-      ...u,
-      uid: u.streamId || u.uid.split('/').pop() || u.uid,
-      streamId: u.streamId || u.uid.split('/').pop() || u.uid
-    }))
+    users.value = newUsers
+      .filter(u => {
+        const uid = u.streamId || u.uid.split('/').pop() || u.uid
+        return uid !== myUid.value
+      })
+      .map(u => ({
+        ...u,
+        uid: u.streamId || u.uid.split('/').pop() || u.uid,
+        streamId: u.streamId || u.uid.split('/').pop() || u.uid
+      }))
   }
 
   const resetState = () => {
@@ -85,8 +102,10 @@ export const useRoomStore = defineStore('room', () => {
 
   return {
     users,
+    myUid,
     error,
     userCount,
+    setMyUid,
     addUser,
     removeUser,
     setUsers,

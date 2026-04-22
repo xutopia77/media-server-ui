@@ -4,6 +4,12 @@
     <div class="video-chat-container">
       <div class="user-sidebar">
         <div class="sidebar-header">
+          <div class="header-section user-section">
+            <div class="my-user-info">
+              <span class="info-label">My ID:</span>
+              <span class="info-value">{{ myUid }}</span>
+            </div>
+          </div>
           <div class="header-section participants-section">
             <h2>Publishers</h2>
             <span class="user-count">{{ roomStore.userCount }} online</span>
@@ -244,7 +250,15 @@ import { useToast } from '@/composables/useToast'
 const { showToast } = useToast()
 const roomStore = useRoomStore()
 
-const myUid = ref(crypto.randomUUID())
+const generateUid = (): string => {
+  const now = Date.now()
+  const seconds = Math.floor(now / 1000)
+  const milliseconds = now % 1000
+  return `${seconds}${milliseconds.toString().padStart(3, '0')}`
+}
+
+const myUid = ref(generateUid())
+roomStore.setMyUid(myUid.value)
 
 interface RemoteUser extends RoomUser {
   videoStream?: MediaStream
@@ -583,6 +597,33 @@ onUnmounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.user-section {
+  padding-bottom: 16px;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.my-user-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: #2a2a2a;
+  border-radius: 6px;
+}
+
+.info-label {
+  font-size: 12px;
+  color: #888;
+  font-weight: 500;
+}
+
+.info-value {
+  font-size: 13px;
+  color: #4fc3f7;
+  font-weight: 500;
+  font-family: monospace;
 }
 
 .participants-section {
