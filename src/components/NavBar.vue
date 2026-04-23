@@ -97,6 +97,7 @@ const menuItems: MenuItem[] = [
   { name: 'GB', path: '/gb' },
   { name: 'GB Device', path: '/gb-device' },
   { name: 'FLV Player', path: '/flv' },
+  { name: 'Debug', path: '/debug' },
   { name: 'About', path: '/about' },
 ]
 

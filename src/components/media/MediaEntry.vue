@@ -154,47 +154,6 @@
                 <input type="number" v-model="settings.bandwidthLimit" placeholder="Unlimited">
               </div>
             </div>
-
-            <div class="settings-section">
-              <h3>Commands</h3>
-              <div class="command-buttons">
-                <button 
-                  class="btn-command" 
-                  @click="handleFfmpegPublish"
-                  :disabled="isCommandLoading"
-                >
-                  FFmpeg Publish
-                </button>
-                <button 
-                  class="btn-command" 
-                  @click="handleRtmpPublish"
-                  :disabled="isCommandLoading"
-                >
-                  RTMP Publish
-                </button>
-                <button 
-                  class="btn-command" 
-                  @click="handleRtmpPlay"
-                  :disabled="isCommandLoading"
-                >
-                  RTMP Play
-                </button>
-                <button 
-                  class="btn-command" 
-                  @click="handleFilePlay"
-                  :disabled="isCommandLoading"
-                >
-                  File Play
-                </button>
-                <button 
-                  class="btn-command btn-danger" 
-                  @click="handleFilePlayStop"
-                  :disabled="isCommandLoading"
-                >
-                  Stop File Play
-                </button>
-              </div>
-            </div>
           </div>
           <div class="settings-footer">
             <button class="btn btn-secondary" @click="resetSettings">Reset</button>
@@ -282,7 +241,6 @@ const localVideoRef = ref<HTMLVideoElement | null>(null)
 const remoteVideoRefs = ref<Map<string, HTMLVideoElement>>(new Map())
 const showSettings = ref(false)
 const isPublishing = ref(false)
-const isCommandLoading = ref(false)
 const isCameraOn = ref(false)
 
 const settings = reactive<WebRTCSettings>({
@@ -479,81 +437,6 @@ const playUser = async (user: RoomUser) => {
 
 const isPlayingUser = (userId: string): boolean => {
   return playingUsers.value.has(userId)
-}
-
-const handleFfmpegPublish = async () => {
-  try {
-    isCommandLoading.value = true
-    const rtcApi = roomStore.getRtcApi()
-    const response = await rtcApi.startFfmpegPublish()
-    console.log('FFmpeg publish response:', response)
-    showToast('FFmpeg publish successful!', 'success')
-  } catch (error) {
-    console.error('Error starting ffmpeg publish:', error)
-    showToast('FFmpeg publish failed: ' + (error as Error).message, 'error')
-  } finally {
-    isCommandLoading.value = false
-  }
-}
-
-const handleRtmpPublish = async () => {
-  try {
-    isCommandLoading.value = true
-    const rtcApi = roomStore.getRtcApi()
-    const response = await rtcApi.startRtmpPublish()
-    console.log('RTMP publish response:', response)
-    showToast('RTMP publish successful!', 'success')
-  } catch (error) {
-    console.error('Error starting rtmp publish:', error)
-    showToast('RTMP publish failed: ' + (error as Error).message, 'error')
-  } finally {
-    isCommandLoading.value = false
-  }
-}
-
-const handleRtmpPlay = async () => {
-  try {
-    isCommandLoading.value = true
-    const rtcApi = roomStore.getRtcApi()
-    const response = await rtcApi.startRtmpPlay(myUid.value)
-    console.log('RTMP play response:', response)
-    showToast('RTMP play successful!', 'success')
-  } catch (error) {
-    console.error('Error starting rtmp play:', error)
-    showToast('RTMP play failed: ' + (error as Error).message, 'error')
-  } finally {
-    isCommandLoading.value = false
-  }
-}
-
-const handleFilePlay = async () => {
-  try {
-    isCommandLoading.value = true
-    const rtcApi = roomStore.getRtcApi()
-    const response = await rtcApi.startFilePlay()
-    console.log('File play response:', response)
-    showToast('File play successful!', 'success')
-  } catch (error) {
-    console.error('Error starting file play:', error)
-    showToast('File play failed: ' + (error as Error).message, 'error')
-  } finally {
-    isCommandLoading.value = false
-  }
-}
-
-const handleFilePlayStop = async () => {
-  try {
-    isCommandLoading.value = true
-    const rtcApi = roomStore.getRtcApi()
-    const response = await rtcApi.stopFilePlay()
-    console.log('File play stop response:', response)
-    showToast('File play stopped successfully!', 'success')
-  } catch (error) {
-    console.error('Error stopping file play:', error)
-    showToast('File play stop failed: ' + (error as Error).message, 'error')
-  } finally {
-    isCommandLoading.value = false
-  }
 }
 
 onUnmounted(async () => {
@@ -1041,44 +924,6 @@ onUnmounted(async () => {
 
 .btn-secondary:hover {
   background-color: #4c4c4c;
-}
-
-.btn-command {
-  width: 100%;
-  padding: 10px 16px;
-  margin-bottom: 8px;
-  background-color: #0e639c;
-  color: #ffffff;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-command:hover:not(:disabled) {
-  background-color: #1177bb;
-}
-
-.btn-command:disabled {
-  background-color: #3c3c3c;
-  color: #888;
-  cursor: not-allowed;
-}
-
-.btn-command.btn-danger {
-  background-color: #d32f2f;
-}
-
-.btn-command.btn-danger:hover:not(:disabled) {
-  background-color: #f44336;
-}
-
-.command-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
 .video-grid {

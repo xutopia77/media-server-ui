@@ -5,6 +5,7 @@ import GbEntry from '@/components/gb/GbEntry.vue'
 import GbDeviceEntry from '@/components/gb-device/GbDeviceEntry.vue'
 import FlvEntry from '@/components/flv/flvEntry.vue'
 import AboutEntry from '@/components/about/AboutEntry.vue'
+import DebugPage from '@/components/DebugPage.vue'
 
 const router = createRouter({
   history: createWebHashHistory(),
@@ -33,6 +34,11 @@ const router = createRouter({
       path: '/flv',
       name: 'flv',
       component: FlvEntry
+    },
+    {
+      path: '/debug',
+      name: 'debug',
+      component: DebugPage
     },
     {
       path: '/about',
