@@ -24,7 +24,7 @@
 
 <script setup lang="ts">
 import { useRoute } from 'vue-router'
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, reactive } from 'vue'
 import { useSSE } from '../composables/useSSE'
 import Toast from './Toast.vue'
 import { eventBus } from '../utils/eventBus'
@@ -32,6 +32,16 @@ import { eventBus } from '../utils/eventBus'
 const route = useRoute()
 
 const SSE_URL = import.meta.env.VITE_SSE_URL || '/api/v1/sse/events'
+
+interface Capabilities {
+  gb: boolean
+  debug: boolean
+}
+
+const capabilities = reactive<Capabilities>({
+  gb: false,
+  debug: false
+})
 
 const { status,  connect } = useSSE({
   url: SSE_URL,
@@ -91,22 +101,69 @@ interface MenuItem {
   path: string
 }
 
-const menuItems: MenuItem[] = [
+const baseMenuItems: MenuItem[] = [
   { name: 'Home', path: '/' },
   { name: 'Media', path: '/media' },
-  { name: 'GB', path: '/gb' },
-  { name: 'GB Device', path: '/gb-device' },
   { name: 'FLV Player', path: '/flv' },
-  { name: 'Debug', path: '/debug' },
   { name: 'About', path: '/about' },
 ]
+
+const gbMenuItems: MenuItem[] = [
+  { name: 'GB', path: '/gb' },
+  { name: 'GB Device', path: '/gb-device' },
+]
+
+const debugMenuItem: MenuItem = { name: 'Debug', path: '/debug' }
+
+const menuItems = computed<MenuItem[]>(() => {
+  const items = [...baseMenuItems]
+  
+  if (capabilities.gb) {
+    items.splice(3, 0, ...gbMenuItems)
+  }
+  
+  if (capabilities.debug) {
+    items.splice(items.length - 1, 0, debugMenuItem)
+  }
+  
+  return items
+})
 
 const isActive = (path: string) => {
   return route.path === path
 }
 
+async function fetchCapabilities() {
+  try {
+    const response = await fetch('/api/v1/sys_info', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ cmd: 'sys_info' }),
+    })
+    
+    if (!response.ok) {
+      console.error('Failed to fetch capabilities:', response.status)
+      return
+    }
+    
+    const data = await response.json()
+    console.log('sys_info response:', data)
+    
+    if (data.code === 200 && data.data?.capabilities) {
+      capabilities.gb = data.data.capabilities.gb ?? false
+      capabilities.debug = data.data.capabilities.debug ?? false
+      console.log('Capabilities loaded:', capabilities)
+    }
+  } catch (error) {
+    console.error('Failed to fetch capabilities:', error)
+  }
+}
+
 onMounted(() => {
   connect()
+  fetchCapabilities()
 })
 </script>
 
