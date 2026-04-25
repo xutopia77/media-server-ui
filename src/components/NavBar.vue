@@ -31,7 +31,7 @@ import { eventBus } from '../utils/eventBus'
 
 const route = useRoute()
 
-const SSE_URL = import.meta.env.VITE_SSE_URL || '/api/v1/sse/events'
+const SSE_URL = import.meta.env.VITE_SSE_URL || '/api/v1/sse'
 
 interface Capabilities {
   gb: boolean
