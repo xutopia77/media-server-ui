@@ -35,6 +35,7 @@ export function useSSE(options: SSEOptions) {
   const connect = () => {
     if (eventSource.value) {
       eventSource.value.close()
+      eventSource.value = null
     }
 
     status.value = 'connecting'
@@ -55,8 +56,6 @@ export function useSSE(options: SSEOptions) {
 
       if (onEvent) {
         eventSource.value.addEventListener('room_event', (event: MessageEvent) => {
-          console.log('SSE custom event received:', event.type)
-          console.log('SSE custom event data:', event.data)
           onEvent(event.type, event.data)
         })
       }

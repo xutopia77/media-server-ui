@@ -82,8 +82,10 @@ export interface SSEEvent {
 export interface CameraOptions {
   width?: number
   height?: number
+  frameRate?: number
   facingMode?: 'user' | 'environment'
   audio?: boolean
+  noiseSuppression?: boolean
 }
 
 export interface PublishRequest {

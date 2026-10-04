@@ -1,1035 +1,418 @@
 <template>
-  <div class="media-entry">
-    <NavBar />
-    <div class="video-chat-container">
-      <div class="user-sidebar">
-        <div class="sidebar-header">
-          <div class="header-section user-section">
-            <div class="my-user-info">
-              <span class="info-label">My ID:</span>
-              <span class="info-value">{{ myUid }}</span>
-            </div>
-          </div>
-          <div class="header-section participants-section">
-            <h2>Publishers</h2>
-            <span class="user-count">{{ roomStore.userCount }} online</span>
-          </div>
-        </div>
-        <div class="user-list">
-          <div
-            v-for="user in roomStore.users"
-            :key="user.uid"
-            class="user-item remote-user"
-          >
-            <div class="user-avatar remote-avatar">
-              {{ user.streamId ? user.streamId.charAt(0) : 'R' }}
-            </div>
-            <div class="user-info">
-              <span class="user-name">{{ user.streamId || user.uid }}</span>
-              <div class="user-details">
-                <span class="user-status" :class="user.status">
-                  {{ user.status }}
-                </span>
-                <span v-if="user.publishers !== undefined" class="user-stat">
-                  📡 {{ user.publishers }}
-                </span>
-                <span v-if="user.subscribers !== undefined" class="user-stat">
-                  👥 {{ user.subscribers }}
-                </span>
-                <button
-                  class="call-btn"
-                  @click="playUser(user)"
-                  :disabled="isPlayingUser(user.uid)"
-                >
-                  {{ isPlayingUser(user.uid) ? 'Playing...' : 'Play' }}
-                </button>
-              </div>
-            </div>
-          </div>
+  <n-layout has-sider class="media-entry">
+    <n-layout-sider bordered :width="280" content-style="display: flex; flex-direction: column; height: 100%">
+      <div class="sidebar-header">
+        <div class="my-id">My ID: <code>{{ myUid }}</code></div>
+        <div class="pub-row">
+          <span class="pub-title">Publishers</span>
+          <n-tag size="small" type="info" round>{{ roomStore.userCount }} online</n-tag>
         </div>
       </div>
-
-      <div class="video-area">
-        <div class="video-header">
-          <div class="video-header-left">
-            <h1>Video Chat</h1>
+      <div class="user-list">
+        <n-empty v-if="roomStore.users.length === 0" description="No publishers yet" class="user-empty" />
+        <div v-for="user in roomStore.users" :key="user.uid" class="user-item">
+          <n-avatar round :size="36">{{ userLabel(user.uid).charAt(0).toUpperCase() }}</n-avatar>
+          <div class="user-meta">
+            <div class="user-name">{{ userLabel(user.uid) }}</div>
+            <div class="user-sub">{{ user.status }} · P{{ user.publishers }} S{{ user.subscribers }}</div>
           </div>
-          <div class="video-controls">
-            <button class="control-btn" :class="{ active: isCameraOn }" title="Camera" @click="toggleCamera">
-              <span class="icon">{{ isCameraOn ? '📹' : '📷' }}</span>
-              <span class="label">{{ isCameraOn ? 'Camera Off' : 'Camera On' }}</span>
-            </button>
-            <button class="control-btn" title="Mute">
-              <span class="icon">🎤</span>
-              <span class="label">Mute</span>
-            </button>
-            <button class="control-btn" title="Share Screen">
-              <span class="icon">🖥️</span>
-              <span class="label">Screen</span>
-            </button>
-            <button class="control-btn" :class="{ active: isPublishing }" :disabled="!isCameraOn" title="Publish Stream" @click="togglePublish">
-              <span class="icon">{{ isPublishing ? '🛑' : '📡' }}</span>
-              <span class="label">{{ isPublishing ? 'Stop' : 'Publish' }}</span>
-            </button>
-            <button class="control-btn" title="Settings" @click="toggleSettings">
-              <span class="icon">⚙️</span>
-              <span class="label">Settings</span>
-            </button>
-          </div>
-        </div>
-
-        <div v-if="showSettings" class="settings-panel">
-          <div class="settings-header">
-            <h2>WebRTC Settings</h2>
-            <button class="close-btn" @click="toggleSettings">✕</button>
-          </div>
-          <div class="settings-content">
-            <div class="settings-section">
-              <h3>Camera Settings</h3>
-              <div class="setting-item">
-                <label>Camera Device</label>
-                <select v-model="settings.cameraDevice">
-                  <option value="">Default Camera</option>
-                  <option value="front">Front Camera</option>
-                  <option value="back">Back Camera</option>
-                </select>
-              </div>
-              <div class="setting-item">
-                <label>Video Quality</label>
-                <select v-model="settings.videoQuality">
-                  <option value="720">720p HD</option>
-                  <option value="1080">1080p Full HD</option>
-                  <option value="480">480p SD</option>
-                </select>
-              </div>
-              <div class="setting-item">
-                <label>Frame Rate</label>
-                <select v-model="settings.frameRate">
-                  <option value="30">30 FPS</option>
-                  <option value="60">60 FPS</option>
-                  <option value="15">15 FPS</option>
-                </select>
-              </div>
-            </div>
-
-            <div class="settings-section">
-              <h3>Audio Settings</h3>
-              <div class="setting-item">
-                <label>Microphone Device</label>
-                <select v-model="settings.microphoneDevice">
-                  <option value="">Default Microphone</option>
-                  <option value="external">External Microphone</option>
-                  <option value="headset">Headset Microphone</option>
-                </select>
-              </div>
-              <div class="setting-item">
-                <label>Audio Quality</label>
-                <select v-model="settings.audioQuality">
-                  <option value="high">High</option>
-                  <option value="medium">Medium</option>
-                  <option value="low">Low</option>
-                </select>
-              </div>
-              <div class="setting-item">
-                <label>Noise Cancellation</label>
-                <label class="toggle-switch">
-                  <input type="checkbox" v-model="settings.noiseCancellation">
-                  <span class="switch"></span>
-                </label>
-              </div>
-            </div>
-
-            <div class="settings-section">
-              <h3>Network Settings</h3>
-              <div class="setting-item">
-                <label>ICE Servers</label>
-                <select v-model="settings.iceServers">
-                  <option value="stun">STUN Only</option>
-                  <option value="turn">TURN Only</option>
-                  <option value="both">Both STUN and TURN</option>
-                </select>
-              </div>
-              <div class="setting-item">
-                <label>Bandwidth Limit (kbps)</label>
-                <input type="number" v-model="settings.bandwidthLimit" placeholder="Unlimited">
-              </div>
-            </div>
-          </div>
-          <div class="settings-footer">
-            <button class="btn btn-secondary" @click="resetSettings">Reset</button>
-            <button class="btn btn-primary" @click="saveSettings">Save</button>
-          </div>
-        </div>
-
-        <div class="video-grid">
-          <div v-if="isCameraOn" class="video-card local-video">
-            <video ref="localVideoRef" autoplay muted playsinline></video>
-            <div class="video-label">Local ({{ myUid }})</div>
-            <div class="video-status">
-              <span class="status-dot"></span>
-              {{ isPublishing ? 'Publishing' : 'Preview' }}
-            </div>
-          </div>
-
-          <div
-            v-for="remoteUser in remoteUsers"
-            :key="remoteUser.uid"
-            class="video-card"
+          <n-button
+            size="tiny"
+            type="primary"
+            secondary
+            :loading="pendingUids.has(user.uid)"
+            :disabled="user.uid in remoteStreams"
+            @click="playUser(user)"
           >
-            <video
-              :ref="el => setRemoteVideoRef(el as HTMLVideoElement | null, remoteUser.uid)"
-              autoplay
-              playsinline
-            ></video>
-            <div class="video-label">{{ remoteUser.streamId || remoteUser.uid }}</div>
-            <div class="video-status">
-              <span class="status-dot"></span>
-              {{ remoteUser.status }}
-            </div>
-          </div>
-
-          <div v-if="!isCameraOn && remoteUsers.length === 0" class="no-participants">
-            <div class="no-participants-icon">👥</div>
-            <h3>No Publishers</h3>
-            <p>Start camera and publish, or wait for others to publish...</p>
-          </div>
+            {{ user.uid in remoteStreams ? 'Playing' : 'Play' }}
+          </n-button>
         </div>
       </div>
-    </div>
-  </div>
+    </n-layout-sider>
+
+    <n-layout-content content-style="padding: 16px;" class="media-content">
+      <div class="control-bar">
+        <n-button :type="isCameraOn ? 'primary' : 'default'" @click="toggleCamera">
+          {{ isCameraOn ? 'Camera Off' : 'Camera On' }}
+        </n-button>
+        <n-button :type="isMuted ? 'warning' : 'default'" :disabled="!isCameraOn" @click="toggleMute">
+          {{ isMuted ? 'Unmute' : 'Mute' }}
+        </n-button>
+        <n-button
+          :type="isScreenSharing ? 'primary' : 'default'"
+          :disabled="!isCameraOn && !isScreenSharing"
+          @click="toggleScreenShare"
+        >
+          {{ isScreenSharing ? 'Stop Share' : 'Screen' }}
+        </n-button>
+        <n-button :type="isPublishing ? 'error' : 'success'" :disabled="!isCameraOn" @click="togglePublish">
+          {{ isPublishing ? 'Stop Publish' : 'Publish' }}
+        </n-button>
+        <n-button quaternary @click="showSettings = true">Settings</n-button>
+      </div>
+
+      <div class="video-grid">
+        <VideoCard
+          v-if="isCameraOn"
+          :stream="localPreviewStream"
+          :label="`Local (${myUid})`"
+          :status="isPublishing ? 'Publishing' : 'Preview'"
+          muted
+        />
+        <VideoCard
+          v-for="item in remoteItems"
+          :key="item.uid"
+          :stream="item.stream"
+          :label="userLabel(item.uid)"
+          :status="userStatus(item.uid)"
+          show-stop
+          @stop="stopPlay(item.uid)"
+        />
+        <n-empty
+          v-if="!isCameraOn && Object.keys(remoteStreams).length === 0"
+          description="No active video"
+          class="grid-empty"
+        >
+          <template #extra>Start the camera and publish, or play a publisher from the list.</template>
+        </n-empty>
+      </div>
+    </n-layout-content>
+
+    <SettingsPanel v-model:show="showSettings" v-model:settings="settings" />
+  </n-layout>
 </template>
 
 <script setup lang="ts">
-import { ref, onUnmounted, reactive } from 'vue'
-import NavBar from '../NavBar.vue'
+import { computed, onUnmounted, reactive, ref, shallowReactive, shallowRef, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { NAvatar, NButton, NEmpty, NLayout, NLayoutContent, NLayoutSider, NTag } from 'naive-ui'
 import { useRoomStore } from '@/stores/room'
-import type { RoomUser } from '@/utils/dataTypedef'
-import { useToast } from '@/composables/useToast'
+import type { CameraOptions, RoomUser } from '@/utils/dataTypedef'
+import { getIceServers } from '@/utils/RtcApi'
+import { useAppMessage } from '@/composables/useAppMessage'
+import VideoCard from './VideoCard.vue'
+import SettingsPanel, { DEFAULT_WEBRTC_SETTINGS, type WebRTCSettings } from './SettingsPanel.vue'
 
-const { showToast } = useToast()
+const message = useAppMessage()
 const roomStore = useRoomStore()
+const route = useRoute()
+
+// roomId / uid come from the URL query, with sensible defaults.
+const queryRoomId = typeof route.query.roomId === 'string' && route.query.roomId ? route.query.roomId : ''
+const queryUid = typeof route.query.uid === 'string' && route.query.uid ? route.query.uid : ''
+const roomId = queryRoomId || '2001'
 
 const generateUid = (): string => {
   const now = Date.now()
-  const seconds = Math.floor(now / 1000)
-  const milliseconds = now % 1000
-  return `${seconds}${milliseconds.toString().padStart(3, '0')}`
+  return `${Math.floor(now / 1000)}${(now % 1000).toString().padStart(3, '0')}`
 }
+const myUid = queryUid || generateUid()
+roomStore.setMyUid(myUid)
 
-const myUid = ref(generateUid())
-roomStore.setMyUid(myUid.value)
+// ---------------------------------------------------------------- state
 
-interface RemoteUser extends RoomUser {
-  videoStream?: MediaStream
-}
-
-interface WebRTCSettings {
-  cameraDevice: string
-  videoQuality: string
-  frameRate: string
-  microphoneDevice: string
-  audioQuality: string
-  noiseCancellation: boolean
-  iceServers: string
-  bandwidthLimit: string
-}
-
-const remoteUsers = ref<RemoteUser[]>([])
-const playingUsers = ref<Set<string>>(new Set())
-
-const localVideoRef = ref<HTMLVideoElement | null>(null)
-const remoteVideoRefs = ref<Map<string, HTMLVideoElement>>(new Map())
+const settings = reactive<WebRTCSettings>({ ...DEFAULT_WEBRTC_SETTINGS })
 const showSettings = ref(false)
-const isPublishing = ref(false)
+
 const isCameraOn = ref(false)
+const isPublishing = ref(false)
+const isMuted = ref(false)
+const isScreenSharing = ref(false)
 
-const settings = reactive<WebRTCSettings>({
-  cameraDevice: '',
-  videoQuality: '720',
-  frameRate: '30',
-  microphoneDevice: '',
-  audioQuality: 'high',
-  noiseCancellation: true,
-  iceServers: 'both',
-  bandwidthLimit: 'unlimited'
-})
+const localStream = shallowRef<MediaStream | null>(null)
+const screenStream = shallowRef<MediaStream | null>(null)
+const localPreviewStream = computed(() => screenStream.value ?? localStream.value)
 
-const defaultSettings: WebRTCSettings = { ...settings }
+// uid -> remote MediaStream. shallowReactive keeps native MediaStream objects unproxied.
+const remoteStreams = shallowReactive<Record<string, MediaStream>>({})
+const pendingUids = reactive(new Set<string>())
 
-const setRemoteVideoRef = (el: HTMLVideoElement | null, userId: string) => {
-  if (el) {
-    remoteVideoRefs.value.set(userId, el)
+const remoteItems = computed(() =>
+  Object.entries(remoteStreams).map(([uid, stream]) => ({ uid, stream }))
+)
+
+// ---------------------------------------------------------------- helpers
+
+function userLabel(uid: string): string {
+  const user = roomStore.users.find((u) => u.uid === uid)
+  return user?.streamId || user?.uid || uid
+}
+
+function userStatus(uid: string): string {
+  const user = roomStore.users.find((u) => u.uid === uid)
+  return user?.status ?? 'connecting'
+}
+
+function buildCameraOptions(): CameraOptions {
+  const sizes: Record<WebRTCSettings['videoQuality'], [number, number]> = {
+    '480': [640, 480],
+    '720': [1280, 720],
+    '1080': [1920, 1080]
+  }
+  const [width, height] = sizes[settings.videoQuality]
+  return {
+    width,
+    height,
+    frameRate: Number(settings.frameRate),
+    facingMode: settings.cameraFacing || undefined,
+    audio: true,
+    noiseSuppression: settings.noiseCancellation
   }
 }
 
-const toggleSettings = () => {
-  showSettings.value = !showSettings.value
-}
+// ---------------------------------------------------------------- camera / mute
 
-const resetSettings = () => {
-  Object.assign(settings, defaultSettings)
-}
-
-const saveSettings = () => {
-  console.log('Settings saved:', settings)
-  showSettings.value = false
-}
-
-const startLocalCamera = async () => {
-  try {
-    const rtcApi = roomStore.getRtcApi()
-    const stream = await rtcApi.startCamera({
-      width: 1280,
-      height: 720,
-      facingMode: 'user',
-      audio: true
-    })
-
-    if (localVideoRef.value) {
-      localVideoRef.value.srcObject = stream
-    }
-    
-    isCameraOn.value = true
-    showToast('Camera started', 'success')
-  } catch (error) {
-    console.error('Error accessing camera:', error)
-    showToast('Camera access failed: ' + (error as Error).message, 'error')
-  }
-}
-
-const stopLocalCamera = () => {
-  const rtcApi = roomStore.getRtcApi()
-  rtcApi.stopCamera()
-  if (localVideoRef.value) {
-    localVideoRef.value.srcObject = null
-  }
-  isCameraOn.value = false
-}
-
-const toggleCamera = async () => {
+async function toggleCamera() {
   if (isCameraOn.value) {
-    if (isPublishing.value) {
-      stopPublish()
-    }
-    stopLocalCamera()
-    showToast('Camera stopped', 'info')
-  } else {
-    await startLocalCamera()
-  }
-}
-
-const togglePublish = async () => {
-  if (isPublishing.value) {
-    stopPublish()
-  } else {
-    await startPublish()
-  }
-}
-
-const startPublish = async () => {
-  if (!isCameraOn.value) {
-    showToast('Please start camera first', 'warning')
+    if (isPublishing.value) stopPublish()
+    rtcApi().stopCamera()
+    localStream.value = null
+    isCameraOn.value = false
+    message.info('Camera stopped')
     return
   }
-  
   try {
-    const rtcApi = roomStore.getRtcApi()
-    const stream = rtcApi.getStream()
-    if (!stream) {
-      console.error('No camera stream available')
-      showToast('No camera stream available, please restart camera', 'warning')
-      return
+    const stream = await rtcApi().startCamera(buildCameraOptions())
+    localStream.value = stream
+    isCameraOn.value = true
+    isMuted.value = false
+    message.success('Camera started')
+  } catch (error) {
+    message.error('Camera access failed: ' + (error as Error).message)
+  }
+}
+
+function toggleMute() {
+  if (!isCameraOn.value) {
+    message.warning('Start the camera first')
+    return
+  }
+  const track = localStream.value?.getAudioTracks()[0]
+  if (!track) {
+    message.warning('No audio track available')
+    return
+  }
+  track.enabled = isMuted.value
+  isMuted.value = !isMuted.value
+}
+
+// ---------------------------------------------------------------- screen share
+
+async function toggleScreenShare() {
+  if (isScreenSharing.value) {
+    stopScreenShare()
+    return
+  }
+  if (!isCameraOn.value) {
+    message.warning('Start the camera first')
+    return
+  }
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({ video: true })
+    const track = stream.getVideoTracks()[0]
+    if (!track) {
+      throw new Error('No screen track')
     }
+    screenStream.value = stream
+    isScreenSharing.value = true
+    await rtcApi().replaceVideoTrack(track)
+    // Browser "Stop sharing" button ends the track; restore the camera then.
+    track.addEventListener('ended', () => stopScreenShare())
+    message.info('Screen sharing started')
+  } catch (error) {
+    message.error('Screen share failed: ' + (error as Error).message)
+  }
+}
 
-    const roomId = '2001'
-    const sessionId = await rtcApi.startPublish(stream, {
-      streamurl: `webrtc://localhost/${roomId}/${myUid.value}`,
-      clientip: '127.0.0.1'
+function stopScreenShare() {
+  const stream = screenStream.value
+  if (!stream) return
+  screenStream.value = null
+  isScreenSharing.value = false
+  stream.getTracks().forEach((track) => track.stop())
+  const camTrack = localStream.value?.getVideoTracks()[0]
+  if (camTrack && isPublishing.value) {
+    rtcApi().replaceVideoTrack(camTrack).catch(() => {})
+  }
+  message.info('Screen sharing stopped')
+}
+
+// ---------------------------------------------------------------- publish
+
+async function togglePublish() {
+  if (isPublishing.value) {
+    stopPublish()
+    return
+  }
+  if (!isCameraOn.value || !localStream.value) {
+    message.warning('Start the camera first')
+    return
+  }
+  try {
+    const sessionId = await rtcApi().startPublish(localStream.value, {
+      streamurl: `webrtc://${window.location.host}/${roomId}/${myUid}`,
+      clientip: '127.0.0.1',
+      iceServers: getIceServers(settings.iceServers)
     })
-
     isPublishing.value = true
-    console.log('Publish started, Session ID:', sessionId)
-    showToast('Publish successful! Session ID: ' + sessionId, 'success')
+    message.success('Publish started, session: ' + sessionId)
   } catch (error) {
-    console.error('Error starting publish:', error)
-    showToast('Publish failed: ' + (error as Error).message, 'error')
+    message.error('Publish failed: ' + (error as Error).message)
   }
 }
 
-const stopPublish = () => {
-  const rtcApi = roomStore.getRtcApi()
-  rtcApi.stopPublish()
+function stopPublish() {
+  rtcApi().stopPublish()
   isPublishing.value = false
-  console.log('Publish stopped')
-  showToast('Publish stopped', 'info')
+  message.info('Publish stopped')
 }
 
-const playUser = async (user: RoomUser) => {
-  console.log('=== playUser start ===')
-  console.log('User info:', user)
-  
+// ---------------------------------------------------------------- play (remote)
+
+async function playUser(user: RoomUser) {
+  const streamId = user.streamId || user.uid
+  if (!streamId) {
+    message.warning('User has no streamId')
+    return
+  }
+  if (user.uid in remoteStreams || pendingUids.has(user.uid)) return
+
+  pendingUids.add(user.uid)
   try {
-    if (!user.streamId) {
-      console.error('Error: User has no streamId')
-      showToast('User has no streamId', 'warning')
-      return
-    }
-
-    console.log('streamId exists:', user.streamId)
-    playingUsers.value.add(user.uid)
-    console.log('Added to playingUsers:', user.uid)
-
-    const roomId = '2001'
-    const streamurl = `webrtc://localhost/${roomId}/${user.streamId}`
-    console.log('Preparing to play, streamurl:', streamurl)
-
-    const existingRemoteUser = remoteUsers.value.find(u => u.uid === user.uid)
-    if (!existingRemoteUser) {
-      console.log('Add new remote user:', user.uid)
-      remoteUsers.value.push({
-        ...user,
-        videoStream: undefined
-      })
-    }
-
-    await new Promise(resolve => setTimeout(resolve, 100))
-
-    const rtcApi = roomStore.getRtcApi()
-    const stream = await rtcApi.startPlay({
-      streamurl: streamurl,
-      clientip: '127.0.0.1'
+    const stream = await rtcApi().startPlay(user.uid, {
+      streamurl: `webrtc://${window.location.host}/${roomId}/${streamId}`,
+      clientip: '127.0.0.1',
+      iceServers: getIceServers(settings.iceServers)
     })
-
-    console.log('startPlay successful, got stream:', stream)
-
-    const updatedRemoteUser = remoteUsers.value.find(u => u.uid === user.uid)
-    if (updatedRemoteUser) {
-      updatedRemoteUser.videoStream = stream
-    }
-
-    const videoElement = remoteVideoRefs.value.get(user.uid)
-    console.log('Find video element, userId:', user.uid, 'videoElement:', videoElement)
-    if (videoElement) {
-      videoElement.srcObject = stream
-      console.log('Set video srcObject')
-    } else {
-      console.warn('Video element not found')
-    }
-
-    playingUsers.value.delete(user.uid)
-    console.log('Removed from playingUsers:', user.uid)
-    console.log('=== playUser completed ===')
-    showToast('Play successful!', 'success')
+    remoteStreams[user.uid] = stream
   } catch (error) {
-    console.error('=== playUser error ===')
-    console.error('Error details:', error)
-    playingUsers.value.delete(user.uid)
-    console.log('Removed from playingUsers:', user.uid)
-    
-    const errorRemoteUser = remoteUsers.value.find(u => u.uid === user.uid)
-    if (errorRemoteUser && !errorRemoteUser.videoStream) {
-      remoteUsers.value = remoteUsers.value.filter(u => u.uid !== user.uid)
-    }
-    
-    showToast('Play failed: ' + (error as Error).message, 'error')
+    message.error('Play failed: ' + (error as Error).message)
+  } finally {
+    pendingUids.delete(user.uid)
   }
 }
 
-const isPlayingUser = (userId: string): boolean => {
-  return playingUsers.value.has(userId)
+function stopPlay(uid: string) {
+  rtcApi().stopPlay(uid)
+  delete remoteStreams[uid]
 }
 
-onUnmounted(async () => {
-  stopPublish()
-  stopLocalCamera()
+// Keep playing cards in sync with the room user list (publisher left -> stop & remove).
+watch(
+  () => roomStore.users.map((u) => u.uid).join(','),
+  () => {
+    const active = new Set(roomStore.users.map((u) => u.uid))
+    for (const uid of Object.keys(remoteStreams)) {
+      if (!active.has(uid)) {
+        stopPlay(uid)
+      }
+    }
+  }
+)
+
+onUnmounted(() => {
+  rtcApi().stopAllPlays()
+  rtcApi().stopPublish()
+  rtcApi().stopCamera()
+  screenStream.value?.getTracks().forEach((track) => track.stop())
 })
+
+// The room store owns the single RtcApi instance.
+function rtcApi() {
+  return roomStore.getRtcApi()
+}
 </script>
 
 <style scoped>
 .media-entry {
-  min-height: 100vh;
-  background-color: #1e1e1e;
-  color: #cccccc;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-}
-
-.video-chat-container {
-  display: flex;
-  min-height: calc(100vh - 60px);
-  overflow-y: auto;
-}
-
-.user-sidebar {
-  width: 280px;
-  background-color: #252526;
-  border-right: 1px solid #3c3c3c;
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
+  height: 100%;
 }
 
 .sidebar-header {
-  padding: 20px;
+  padding: 16px;
   border-bottom: 1px solid #3c3c3c;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.header-section {
   display: flex;
   flex-direction: column;
   gap: 10px;
 }
 
-.user-section {
-  padding-bottom: 16px;
-  border-bottom: 1px solid #3c3c3c;
-}
-
-.my-user-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: #2a2a2a;
-  border-radius: 6px;
-}
-
-.info-label {
+.my-id {
   font-size: 12px;
-  color: #888;
-  font-weight: 500;
+  color: #858585;
 }
 
-.info-value {
-  font-size: 13px;
+.my-id code {
   color: #4fc3f7;
-  font-weight: 500;
   font-family: monospace;
 }
 
-.participants-section {
-  flex-direction: row;
+.pub-row {
+  display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.sidebar-header h2 {
-  font-size: 18px;
+.pub-title {
+  font-size: 15px;
   font-weight: 500;
-  margin: 0;
   color: #ffffff;
-}
-
-.user-count {
-  font-size: 12px;
-  color: #0e639c;
-  background-color: rgba(14, 99, 156, 0.1);
-  padding: 4px 8px;
-  border-radius: 10px;
-  font-weight: 500;
-  width: fit-content;
 }
 
 .user-list {
   flex: 1;
   overflow-y: auto;
-  padding: 10px;
+  padding: 8px;
+}
+
+.user-empty {
+  margin-top: 40px;
 }
 
 .user-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
+  gap: 10px;
+  padding: 8px;
   border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.15s;
-  margin-bottom: 4px;
 }
 
 .user-item:hover {
-  background-color: #3c3c3c;
+  background-color: rgba(255, 255, 255, 0.04);
 }
 
-.user-item.active {
-  background-color: rgba(14, 99, 156, 0.15);
-  border: 1px solid #0e639c;
-}
-
-.user-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #0e639c, #1177bb);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  font-weight: 600;
-  color: #ffffff;
-  flex-shrink: 0;
-}
-
-.remote-avatar {
-  background: linear-gradient(135deg, #4caf50, #66bb6a);
-  border: 2px solid #4caf50;
-}
-
-.remote-user {
-  border-left: 3px solid #4caf50;
-}
-
-.user-info {
+.user-meta {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  min-width: 0;
 }
 
 .user-name {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: 13px;
   color: #ffffff;
-}
-
-.user-status {
-  font-size: 12px;
-  color: #888;
-  text-transform: capitalize;
-}
-
-.user-status.online {
-  color: #4caf50;
-}
-
-.user-status.offline {
-  color: #f44336;
-}
-
-.user-status.busy {
-  color: #ffa500;
-}
-
-.user-details {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.user-stat {
-  font-size: 11px;
-  color: #888;
-  background-color: rgba(255, 255, 255, 0.05);
-  padding: 2px 6px;
-  border-radius: 3px;
-}
-
-.call-btn {
-  font-size: 11px;
-  padding: 4px 10px;
-  border: 1px solid #0e639c;
-  background-color: #0e639c;
-  color: #ffffff;
-  border-radius: 3px;
-  cursor: pointer;
-  transition: all 0.15s;
-  font-weight: 500;
-}
-
-.call-btn:hover:not(:disabled) {
-  background-color: #1177bb;
-  border-color: #1177bb;
-}
-
-.call-btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.video-area {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  overflow-y: auto;
-}
-
-.video-header {
-  padding: 16px 24px;
-  border-bottom: 1px solid #3c3c3c;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background-color: #252526;
-}
-
-.video-header-left {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.video-header h1 {
-  font-size: 20px;
-  font-weight: 500;
-  margin: 0;
-  color: #ffffff;
-}
-
-.video-controls {
-  display: flex;
-  gap: 8px;
-}
-
-.control-btn {
-  min-width: 60px;
-  height: auto;
-  padding: 8px 12px;
-  border-radius: 4px;
-  border: 1px solid #3c3c3c;
-  background-color: #3c3c3c;
-  color: #cccccc;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  transition: all 0.15s;
-}
-
-.control-btn:hover {
-  background-color: #4c4c4c;
-  border-color: #5c5c5c;
-  color: #ffffff;
-}
-
-.control-btn .icon {
-  font-size: 20px;
-  line-height: 1;
-}
-
-.control-btn .label {
-  font-size: 11px;
-  line-height: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.control-btn.active {
-  background-color: #0e639c;
-  border-color: #1177bb;
-  color: #ffffff;
+.user-sub {
+  font-size: 11px;
+  color: #858585;
 }
 
-.control-btn.active:hover {
-  background-color: #1177bb;
-  border-color: #2288cc;
-}
-
-.control-btn:disabled {
-  background-color: #2a2a2a;
-  border-color: #3c3c3c;
-  color: #666;
-  cursor: not-allowed;
-}
-
-.control-btn:disabled:hover {
-  background-color: #2a2a2a;
-  border-color: #3c3c3c;
-  color: #666;
-}
-
-.settings-panel {
-  background-color: #252526;
-  border-bottom: 1px solid #3c3c3c;
-  overflow-y: hidden;
-}
-
-.settings-header {
-  padding: 16px 24px;
-  border-bottom: 1px solid #3c3c3c;
+.control-bar {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.settings-header h2 {
-  font-size: 18px;
-  font-weight: 500;
-  margin: 0;
-  color: #ffffff;
-}
-
-.close-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: 1px solid #3c3c3c;
-  background-color: #3c3c3c;
-  color: #cccccc;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s;
-  font-size: 16px;
-}
-
-.close-btn:hover {
-  background-color: #4c4c4c;
-  border-color: #5c5c5c;
-  color: #ffffff;
-}
-
-.settings-content {
-  padding: 24px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 24px;
-}
-
-.settings-section {
-  background-color: #1e1e1e;
-  border-radius: 8px;
-  padding: 16px;
-  border: 1px solid #3c3c3c;
-}
-
-.settings-section h3 {
-  font-size: 14px;
-  font-weight: 500;
-  margin: 0 0 16px;
-  color: #ffffff;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.setting-item {
+  gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 16px;
 }
 
-.setting-item:last-child {
-  margin-bottom: 0;
-}
-
-.setting-item label {
-  display: block;
-  font-size: 13px;
-  color: #cccccc;
-  margin-bottom: 8px;
-}
-
-.setting-item select,
-.setting-item input[type="number"] {
-  width: 100%;
-  padding: 8px 12px;
-  border-radius: 4px;
-  border: 1px solid #3c3c3c;
-  background-color: #252526;
-  color: #ffffff;
-  font-size: 14px;
-  transition: border-color 0.15s;
-}
-
-.setting-item select:hover,
-.setting-item input[type="number"]:hover {
-  border-color: #0e639c;
-}
-
-.setting-item select:focus,
-.setting-item input[type="number"]:focus {
-  outline: none;
-  border-color: #0e639c;
-  box-shadow: 0 0 0 2px rgba(14, 99, 156, 0.2);
-}
-
-.setting-item select option {
-  background-color: #252526;
-  color: #ffffff;
-}
-
-.toggle-switch {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.toggle-switch input[type="checkbox"] {
-  display: none;
-}
-
-.toggle-switch .switch {
-  position: relative;
-  width: 44px;
-  height: 24px;
-  background-color: #3c3c3c;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: background-color 0.15s;
-}
-
-.toggle-switch .switch::before {
-  content: '';
-  position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 20px;
-  height: 20px;
-  background-color: #ffffff;
-  border-radius: 50%;
-  transition: transform 0.15s;
-}
-
-.toggle-switch input[type="checkbox"]:checked + .switch {
-  background-color: #0e639c;
-}
-
-.toggle-switch input[type="checkbox"]:checked + .switch::before {
-  transform: translateX(20px);
-}
-
-.settings-footer {
-  padding: 16px 24px;
-  border-top: 1px solid #3c3c3c;
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  background-color: #252526;
-}
-
-.btn {
-  padding: 8px 16px;
-  border-radius: 4px;
-  border: none;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.btn-primary {
-  background-color: #0e639c;
-  color: #ffffff;
-}
-
-.btn-primary:hover {
-  background-color: #1177bb;
-}
-
-.btn-secondary {
-  background-color: #3c3c3c;
-  color: #ffffff;
-}
-
-.btn-secondary:hover {
-  background-color: #4c4c4c;
-}
-
 .video-grid {
-  flex: 1;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
   gap: 16px;
-  padding: 24px;
-  overflow-y: hidden;
-  align-content: start;
+  align-content: flex-start;
 }
 
-.video-card {
-  position: relative;
-  background-color: #000000;
-  border-radius: 8px;
-  overflow: hidden;
-  aspect-ratio: 16 / 9;
-  border: 2px solid #3c3c3c;
-  transition: border-color 0.15s;
-}
-
-.video-card:hover {
-  border-color: #0e639c;
-}
-
-.video-card video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.video-label {
-  position: absolute;
-  bottom: 12px;
-  left: 12px;
-  background-color: rgba(0, 0, 0, 0.7);
-  color: #ffffff;
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 13px;
-  font-weight: 500;
-  backdrop-filter: blur(4px);
-}
-
-.video-status {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  background-color: rgba(0, 0, 0, 0.7);
-  color: #ffffff;
-  padding: 6px 12px;
-  border-radius: 4px;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  backdrop-filter: blur(4px);
-}
-
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: #4caf50;
-  animation: pulse 2s infinite;
-}
-
-.local-video {
-  border-color: #0e639c;
-}
-
-.no-participants {
-  grid-column: 1 / -1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 40px;
-  text-align: center;
-  color: #888;
-}
-
-.no-participants-icon {
-  font-size: 64px;
-  margin-bottom: 20px;
-}
-
-.no-participants h3 {
-  font-size: 24px;
-  font-weight: 500;
-  margin: 0 0 12px;
-  color: #ffffff;
-}
-
-.no-participants p {
-  font-size: 16px;
-  margin: 0;
-}
-
-@keyframes pulse {
-  0%, 100% {
-    opacity: 1;
-  }
-  50% {
-    opacity: 0.5;
-  }
+.grid-empty {
+  margin: 80px auto;
 }
 </style>

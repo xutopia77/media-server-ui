@@ -21,20 +21,10 @@ class EventBus {
   }
 
   emit(event: string, data?: unknown) {
-    console.log(`=== EventBus.emit called ===`)
-    console.log(`Event: ${event}`)
-    console.log(`Data:`, data)
-    console.log(`Registered listeners for ${event}:`, this.events.get(event)?.length || 0)
-    
     const callbacks = this.events.get(event)
     if (callbacks) {
-      console.log(`Executing ${callbacks.length} callbacks for event: ${event}`)
-      callbacks.forEach(callback => callback(data))
-      console.log(`All callbacks executed for event: ${event}`)
-    } else {
-      console.log(`No callbacks registered for event: ${event}`)
+      callbacks.forEach((callback) => callback(data))
     }
-    console.log(`=== EventBus.emit completed ===`)
   }
 
   clear(event?: string) {

@@ -1,133 +1,121 @@
-import axios from 'axios'
+import http from '@/api/http'
 import * as Dty from './dataTypedef'
 
+const DEFAULT_ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }]
+
+const ICE_SERVER_PRESETS: Record<'stun' | 'both', RTCIceServer[]> = {
+  stun: [{ urls: 'stun:stun.l.google.com:19302' }],
+  both: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    {
+      urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443'],
+      username: 'openrelayproject',
+      credential: 'openrelayproject'
+    }
+  ]
+}
+
+/** Resolve the settings-panel ICE preset into real RTCIceServer list. */
+export function getIceServers(preset?: 'stun' | 'both'): RTCIceServer[] {
+  return (preset && ICE_SERVER_PRESETS[preset]) || DEFAULT_ICE_SERVERS
+}
+
+interface PlaySession {
+  pc: RTCPeerConnection
+  stream: MediaStream
+  sessionId: string | null
+}
+
+/** Wait for ICE gathering to finish, with a timeout so unreachable STUN servers never hang the flow. */
+function waitIceGathering(pc: RTCPeerConnection, timeoutMs = 3000): Promise<void> {
+  if (pc.iceGatheringState === 'complete') {
+    return Promise.resolve()
+  }
+  return new Promise((resolve) => {
+    let settled = false
+    const done = () => {
+      if (!settled) {
+        settled = true
+        resolve()
+      }
+    }
+    pc.addEventListener('icegatheringstatechange', () => {
+      if (pc.iceGatheringState === 'complete') {
+        done()
+      }
+    })
+    setTimeout(done, timeoutMs)
+  })
+}
+
 export class RtcApi {
+  private cameraStream: MediaStream | null = null
   private peerConnection: RTCPeerConnection | null = null
-  private stream: MediaStream | null = null
   private sessionId: string | null = null
-  private streamurl: string = ''
-  private playPeerConnection: RTCPeerConnection | null = null
-  private playStream: MediaStream | null = null
-  private playSessionId: string | null = null
-  private currentRoom: { roomId: string; uid: string } | null = null
+  private playSessions = new Map<string, PlaySession>()
+
+  // ---------------------------------------------------------------- camera
 
   async startCamera(options: Dty.CameraOptions = {}): Promise<MediaStream> {
-    const defaultOptions: Dty.CameraOptions = {
-      width: 1280,
-      height: 720,
-      facingMode: 'user',
-      audio: true
+    const video: MediaTrackConstraints = {
+      width: { ideal: options.width ?? 1280 },
+      height: { ideal: options.height ?? 720 }
+    }
+    if (options.facingMode) {
+      video.facingMode = options.facingMode
+    }
+    if (options.frameRate) {
+      video.frameRate = { ideal: options.frameRate }
     }
 
-    const finalOptions = { ...defaultOptions, ...options }
+    const audio: MediaTrackConstraints | false =
+      options.audio === false ? false : { noiseSuppression: options.noiseSuppression ?? true }
 
-    try {
-      this.stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: finalOptions.width },
-          height: { ideal: finalOptions.height },
-          facingMode: finalOptions.facingMode
-        },
-        audio: finalOptions.audio
-      })
-
-      return this.stream
-    } catch (error) {
-      console.error('Error accessing camera:', error)
-      throw error
-    }
+    this.cameraStream = await navigator.mediaDevices.getUserMedia({ video, audio })
+    return this.cameraStream
   }
 
   stopCamera(): void {
-    if (this.stream) {
-      this.stream.getTracks().forEach((track) => track.stop())
-      this.stream = null
+    if (this.cameraStream) {
+      this.cameraStream.getTracks().forEach((track) => track.stop())
+      this.cameraStream = null
     }
   }
 
   getStream(): MediaStream | null {
-    return this.stream
+    return this.cameraStream
   }
 
-  async switchCamera(facingMode: 'user' | 'environment'): Promise<MediaStream> {
-    this.stopCamera()
-    return this.startCamera({ facingMode })
-  }
+  // ---------------------------------------------------------------- publish
 
-  async getAvailableCameras(): Promise<MediaDeviceInfo[]> {
-    const devices = await navigator.mediaDevices.enumerateDevices()
-    return devices.filter((device) => device.kind === 'videoinput')
-  }
-
-  async getAvailableMicrophones(): Promise<MediaDeviceInfo[]> {
-    const devices = await navigator.mediaDevices.enumerateDevices()
-    return devices.filter((device) => device.kind === 'audioinput')
-  }
-
+  /**
+   * Publish the given stream. The caller keeps ownership of the stream
+   * (typically the local camera), so stopping the publish never stops the camera.
+   */
   async startPublish(stream: MediaStream, options: Dty.PublishOptions): Promise<string> {
-    this.stream = stream
-    this.streamurl = options.streamurl
-
-    const iceServers = options.iceServers || [
-      { urls: 'stun:stun.l.google.com:19302' }
-    ]
-
-    // this.peerConnection = new RTCPeerConnection({ iceServers })
-    this.peerConnection = new RTCPeerConnection()
+    const pc = new RTCPeerConnection({ iceServers: options.iceServers ?? DEFAULT_ICE_SERVERS })
+    this.peerConnection = pc
 
     stream.getTracks().forEach((track) => {
-      this.peerConnection!.addTrack(track, stream)
+      pc.addTrack(track, stream)
     })
 
-    this.peerConnection.onicecandidate = (event) => {
-      if (event.candidate === null) {
-        console.log('ICE gathering complete')
-      }
-    }
-
-    this.peerConnection.onconnectionstatechange = () => {
-      console.log('Connection state:', this.peerConnection?.connectionState)
-    }
-
-    const offer = await this.peerConnection.createOffer()
-    await this.peerConnection.setLocalDescription(offer)
-
-    await new Promise<void>((resolve) => {
-      if (this.peerConnection?.iceGatheringState === 'complete') {
-        resolve()
-      } else {
-        this.peerConnection!.onicegatheringstatechange = () => {
-          if (this.peerConnection?.iceGatheringState === 'complete') {
-            resolve()
-          }
-        }
-      }
-    })
-
-    const request: Dty.PublishRequest = {
-      streamurl: options.streamurl,
-      sdp: this.peerConnection.localDescription?.sdp || '',
-      clientip: options.clientip
-    }
+    const offer = await pc.createOffer()
+    await pc.setLocalDescription(offer)
+    await waitIceGathering(pc)
 
     try {
-      const response = await axios.post<Dty.PublishResponse>('/api/v1/rtc/publish', request)
-
-      if (response.data.code !== 0) {
-        throw new Error('Publish failed')
-      }
-
-      const answer = new RTCSessionDescription({
-        type: 'answer',
-        sdp: response.data.sdp
+      const response = await http.post<Dty.PublishResponse>('/api/v1/rtc/publish', {
+        streamurl: options.streamurl,
+        sdp: pc.localDescription?.sdp || '',
+        clientip: options.clientip
       })
 
-      await this.peerConnection.setRemoteDescription(answer)
+      const answer = new RTCSessionDescription({ type: 'answer', sdp: response.data.sdp })
+      await pc.setRemoteDescription(answer)
       this.sessionId = response.data.sessionid
-
       return this.sessionId
     } catch (error) {
-      console.error('Error publishing stream:', error)
       this.stopPublish()
       throw error
     }
@@ -138,233 +126,86 @@ export class RtcApi {
       this.peerConnection.close()
       this.peerConnection = null
     }
-
-    if (this.stream) {
-      this.stream.getTracks().forEach((track) => track.stop())
-      this.stream = null
-    }
-
     this.sessionId = null
   }
 
-  getSessionId(): string | null {
-    return this.sessionId
+  isPublishing(): boolean {
+    return this.peerConnection !== null
   }
 
-  getStreamurl(): string {
-    return this.streamurl
-  }
-
-  getConnectionState(): RTCPeerConnectionState | undefined {
-    return this.peerConnection?.connectionState
-  }
-
-  async getRoomInfo(): Promise<Dty.RoomInfo> {
-    try {
-      const response = await axios.get<Dty.RoomResponse>('/api/v1/rtc/room')
-
-      if (response.data.code !== 0) {
-        throw new Error('Get room info failed')
-      }
-
-      return response.data.data
-    } catch (error) {
-      console.error('Error getting room info:', error)
-      throw error
+  /** Replace the outgoing video track (used for screen sharing while publishing). */
+  async replaceVideoTrack(track: MediaStreamTrack): Promise<void> {
+    const sender = this.peerConnection?.getSenders().find((s) => s.track?.kind === 'video')
+    if (sender) {
+      await sender.replaceTrack(track)
     }
   }
 
-  async startPlay(options: Dty.PlayOptions): Promise<MediaStream> {
-    console.log('=== startPlay start ===')
-    console.log('Play options:', options)
+  // ---------------------------------------------------------------- play (multi-session)
 
-    const iceServers = options.iceServers || [
-      { urls: 'stun:stun.l.google.com:19302' }
-    ]
-    console.log('ICE servers:', iceServers)
+  /**
+   * Start playing a remote stream. Each uid owns an independent peer connection,
+   * so multiple users can be played at the same time.
+   * Returns a MediaStream immediately; tracks are attached as they arrive.
+   */
+  async startPlay(uid: string, options: Dty.PlayOptions): Promise<MediaStream> {
+    const pc = new RTCPeerConnection({ iceServers: options.iceServers ?? DEFAULT_ICE_SERVERS })
+    const stream = new MediaStream()
+    const session: PlaySession = { pc, stream, sessionId: null }
+    this.playSessions.set(uid, session)
 
-    // this.playPeerConnection = new RTCPeerConnection({ iceServers })
-    this.playPeerConnection = new RTCPeerConnection()
-    console.log('Created playPeerConnection successfully')
+    // Play scenario: recvonly transceivers, audio first (SDP m-line order matters)
+    pc.addTransceiver('audio', { direction: 'recvonly' })
+    pc.addTransceiver('video', { direction: 'recvonly' })
 
-    // Add media transceivers (recvonly) - play scenario
-    // Note: Add order is audio, video, SDP m-line order follows this order
-    this.playPeerConnection.addTransceiver('audio', { direction: 'recvonly' })
-    this.playPeerConnection.addTransceiver('video', { direction: 'recvonly' })
-    console.log('Added media transceivers successfully (audio + video recvonly)')
-
-    this.playPeerConnection.ontrack = (event) => {
-      console.log('Received track:', event.track.kind)
-      if (event.streams && event.streams[0]) {
-        this.playStream = event.streams[0]
-        console.log('Set playStream successfully')
-      }
+    pc.ontrack = (event) => {
+      stream.addTrack(event.track)
     }
-
-    this.playPeerConnection.onicecandidate = (event) => {
-      console.log('ICE candidate:', event.candidate ? 'candidate received' : 'null (gathering complete)')
-      if (event.candidate === null) {
-        console.log('ICE gathering complete for play')
-      }
-    }
-
-    this.playPeerConnection.onconnectionstatechange = () => {
-      console.log('Play connection state:', this.playPeerConnection?.connectionState)
-    }
-
-    console.log('Start creating offer...')
-    const offer = await this.playPeerConnection.createOffer()
-    console.log('Offer created successfully')
-
-    console.log('Set local description...')
-    await this.playPeerConnection.setLocalDescription(offer)
-    console.log('Local description set successfully')
-
-    const request: Dty.PlayRequest = {
-      streamurl: options.streamurl,
-      sdp: this.playPeerConnection.localDescription?.sdp || '',
-      clientip: options.clientip
-    }
-    console.log('Prepare to send request to /api/v1/rtc/play')
-    console.log('Request streamurl:', request.streamurl)
-    console.log('Request SDP length:', request.sdp.length)
-    console.log('Request clientip:', request.clientip)
 
     try {
-      console.log('Start sending axios.post request...')
-      const response = await axios.post<Dty.PlayResponse>('/api/v1/rtc/play', request)
-      console.log('axios.post request successful')
-      console.log('Response status:', response.status)
-      console.log('Response data:', response.data)
+      const offer = await pc.createOffer()
+      await pc.setLocalDescription(offer)
+      await waitIceGathering(pc)
 
-      if (response.data.code !== 0) {
-        console.error('Response code is not 0:', response.data.code)
-        console.error('Response server:', response.data.server)
-        throw new Error('Play failed')
-      }
-
-      console.log('Start setting remote description...')
-      const answer = new RTCSessionDescription({
-        type: 'answer',
-        sdp: response.data.sdp
+      const response = await http.post<Dty.PlayResponse>('/api/v1/rtc/play', {
+        streamurl: options.streamurl,
+        sdp: pc.localDescription?.sdp || '',
+        clientip: options.clientip
       })
-      console.log('Answer SDP created successfully')
 
-      await this.playPeerConnection.setRemoteDescription(answer)
-      console.log('Remote description set successfully')
-      this.playSessionId = response.data.sessionid
-      console.log('Play session ID:', this.playSessionId)
-
-      console.log('=== startPlay completed ===')
-      return this.playStream!
+      const answer = new RTCSessionDescription({ type: 'answer', sdp: response.data.sdp })
+      await pc.setRemoteDescription(answer)
+      session.sessionId = response.data.sessionid
+      return stream
     } catch (error) {
-      console.error('=== startPlay error ===')
-      console.error('Error details:', error)
-      if (axios.isAxiosError(error)) {
-        console.error('Axios error')
-        console.error('Request URL:', error.config?.url)
-        console.error('Request method:', error.config?.method)
-        console.error('Request data:', error.config?.data)
-        console.error('Response status:', error.response?.status)
-        console.error('Response data:', error.response?.data)
-        console.error('Response headers:', error.response?.headers)
-      } else if (error instanceof Error) {
-        console.error('Error name:', error.name)
-        console.error('Error message:', error.message)
-        console.error('Error stack:', error.stack)
-      }
-      console.error('Stop play...')
-      this.stopPlay()
+      pc.close()
+      this.playSessions.delete(uid)
       throw error
     }
   }
 
-  stopPlay(): void {
-    if (this.playPeerConnection) {
-      this.playPeerConnection.close()
-      this.playPeerConnection = null
-    }
-
-    this.playStream = null
-    this.playSessionId = null
-  }
-
-  getPlayStream(): MediaStream | null {
-    return this.playStream
-  }
-
-  getPlaySessionId(): string | null {
-    return this.playSessionId
-  }
-
-  getPlayConnectionState(): RTCPeerConnectionState | undefined {
-    return this.playPeerConnection?.connectionState
-  }
-
-  async startFfmpegPublish(): Promise<Dty.RunCmdResponse> {
-    try {
-      const request: Dty.RunCmdRequest = {
-        cmd: 'ffmpeg_publish'
-      }
-      const response = await axios.post<Dty.RunCmdResponse>('/api/v1/run_cmd', request)
-      return response.data
-    } catch (error) {
-      console.error('Error starting ffmpeg publish:', error)
-      throw error
+  stopPlay(uid: string): void {
+    const session = this.playSessions.get(uid)
+    if (session) {
+      session.pc.close()
+      this.playSessions.delete(uid)
     }
   }
 
-  async startRtmpPublish(): Promise<Dty.RunCmdResponse> {
-    try {
-      const request: Dty.RunCmdRequest = {
-        cmd: 'rtmp_publish'
-      }
-      const response = await axios.post<Dty.RunCmdResponse>('/api/v1/run_cmd', request)
-      return response.data
-    } catch (error) {
-      console.error('Error starting rtmp publish:', error)
-      throw error
-    }
+  stopAllPlays(): void {
+    this.playSessions.forEach((session) => session.pc.close())
+    this.playSessions.clear()
   }
 
-  async startRtmpPlay(userId: string): Promise<Dty.RunCmdResponse> {
-    try {
-      const request: Dty.RunCmdRequest = {
-        cmd: 'rtmp_play',
-        data: userId
-      }
-      const response = await axios.post<Dty.RunCmdResponse>('/api/v1/run_cmd', request)
-      return response.data
-    } catch (error) {
-      console.error('Error starting rtmp play:', error)
-      throw error
-    }
+  hasPlay(uid: string): boolean {
+    return this.playSessions.has(uid)
   }
 
-  async startFilePlay(): Promise<Dty.RunCmdResponse> {
-    try {
-      const request: Dty.RunCmdRequest = {
-        cmd: 'file_play'
-      }
-      const response = await axios.post<Dty.RunCmdResponse>('/api/v1/run_cmd', request)
-      return response.data
-    } catch (error) {
-      console.error('Error starting file play:', error)
-      throw error
-    }
-  }
+  // ---------------------------------------------------------------- debug commands
 
-  async stopFilePlay(): Promise<Dty.RunCmdResponse> {
-    try {
-      const request: Dty.RunCmdRequest = {
-        cmd: 'file_play_stop'
-      }
-      const response = await axios.post<Dty.RunCmdResponse>('/api/v1/run_cmd', request)
-      return response.data
-    } catch (error) {
-      console.error('Error stopping file play:', error)
-      throw error
-    }
+  async runCmd(cmd: string, data?: string): Promise<Dty.RunCmdResponse> {
+    const response = await http.post<Dty.RunCmdResponse>('/api/v1/run_cmd', { cmd, data })
+    return response.data
   }
 }
 
