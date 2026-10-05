@@ -23,6 +23,17 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path
+      },
+      // WHIP/WHEP signaling endpoints (SDP offer in body, session URL in Location header).
+      '/whip': {
+        target: 'http://localhost:38080',
+        changeOrigin: true,
+        secure: false
+      },
+      '/whep': {
+        target: 'http://localhost:38080',
+        changeOrigin: true,
+        secure: false
       }
     }
   },

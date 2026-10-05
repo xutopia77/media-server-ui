@@ -249,13 +249,13 @@ async function togglePublish() {
     return
   }
   try {
-    const sessionId = await rtcApi().startPublish(localStream.value, {
-      streamurl: `webrtc://${window.location.host}/${roomId}/${myUid}`,
-      clientip: '127.0.0.1',
+    const sessionUrl = await rtcApi().startPublish(localStream.value, {
+      roomId,
+      uid: myUid,
       iceServers: getIceServers(settings.iceServers)
     })
     isPublishing.value = true
-    message.success('Publish started, session: ' + sessionId)
+    message.success('Publish started, session: ' + sessionUrl)
   } catch (error) {
     message.error('Publish failed: ' + (error as Error).message)
   }
@@ -280,8 +280,8 @@ async function playUser(user: RoomUser) {
   pendingUids.add(user.uid)
   try {
     const stream = await rtcApi().startPlay(user.uid, {
-      streamurl: `webrtc://${window.location.host}/${roomId}/${streamId}`,
-      clientip: '127.0.0.1',
+      roomId,
+      streamId,
       iceServers: getIceServers(settings.iceServers)
     })
     remoteStreams[user.uid] = stream

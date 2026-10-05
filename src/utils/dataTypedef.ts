@@ -88,41 +88,17 @@ export interface CameraOptions {
   noiseSuppression?: boolean
 }
 
-export interface PublishRequest {
-  streamurl: string
-  sdp: string
-  clientip?: string
-}
-
-export interface PublishResponse {
-  code: number
-  sdp: string
-  sessionid: string
-  server: string
-}
-
+// WHIP publish options: the offer SDP is POSTed to /whip/{roomId}/{uid}.
 export interface PublishOptions {
-  streamurl: string
-  clientip?: string
+  roomId: string
+  uid: string
   iceServers?: RTCIceServer[]
 }
 
-export interface PlayRequest {
-  streamurl: string
-  sdp: string
-  clientip?: string
-}
-
-export interface PlayResponse {
-  code: number
-  server: string
-  sdp: string
-  sessionid: string
-}
-
+// WHEP play options: the offer SDP is POSTed to /whep/{roomId}/{streamId}.
 export interface PlayOptions {
-  streamurl: string
-  clientip?: string
+  roomId: string
+  streamId: string
   iceServers?: RTCIceServer[]
 }
 
