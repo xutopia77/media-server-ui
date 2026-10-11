@@ -13,7 +13,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 
 const props = defineProps<{
   stream: MediaStream | null
@@ -27,17 +27,18 @@ const emit = defineEmits<{ stop: [] }>()
 
 const videoEl = ref<HTMLVideoElement | null>(null)
 
-// Bind the stream as soon as the element exists and whenever it changes,
-// so callers never need to wait for rendering (no setTimeout hacks).
-watch(
-  () => props.stream,
-  (stream) => {
-    if (videoEl.value) {
-      videoEl.value.srcObject = stream
-    }
-  },
-  { immediate: true, flush: 'post' }
-)
+// Bind the stream whenever it changes AND once on mount: an immediate
+// watcher alone is not reliable here (its first run can precede the
+// template-ref binding, silently skipping srcObject). onMounted guarantees
+// the element exists, watch covers later stream swaps; both are idempotent.
+function bindStream() {
+  if (videoEl.value && videoEl.value.srcObject !== props.stream) {
+    videoEl.value.srcObject = props.stream
+  }
+}
+
+onMounted(bindStream)
+watch(() => props.stream, bindStream)
 </script>
 
 <style scoped>
