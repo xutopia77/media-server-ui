@@ -8,6 +8,9 @@
       class="navbar-menu"
       @update:value="onMenuSelect"
     />
+    <n-alert v-if="capError" type="error" class="cap-alert" :show-icon="true" closable>
+      Failed to load capabilities from the server; feature menus are hidden until it succeeds.
+    </n-alert>
     <n-tag :type="tagType" round size="small" :bordered="false" class="conn-tag">
       <span class="status-dot" :class="status" />
       {{ statusText }}
@@ -16,7 +19,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { MenuOption } from 'naive-ui'
 import { useSSE } from '../composables/useSSE'
@@ -28,13 +31,15 @@ const router = useRouter()
 
 const SSE_URL = import.meta.env.VITE_SSE_URL || '/api/v1/sse/events'
 
-// Default to all-visible: when the capabilities request fails, keep every
-// menu entry so the UI does not lose pages while the server is unavailable.
+// Feature menus default to hidden and only show what the server grants:
+// when the capabilities request fails, an error banner is shown instead.
 const capabilities = reactive<Capabilities>({
-  gb: true,
-  gb_device: true,
-  debug: true
+  gb: false,
+  gb_device: false,
+  debug: false
 })
+
+const capError = ref(false)
 
 const { status, connect } = useSSE({
   url: SSE_URL,
@@ -123,8 +128,10 @@ async function fetchCapabilities() {
     capabilities.gb = !!caps.gb
     capabilities.gb_device = !!caps.gb_device
     capabilities.debug = !!caps.debug
+    capError.value = false
   } catch (error) {
-    // Keep all menus visible when capabilities are unavailable.
+    // Feature menus stay hidden; surface the failure on the page instead.
+    capError.value = true
     console.error('Failed to fetch capabilities:', error)
   }
 }
@@ -161,6 +168,10 @@ onMounted(() => {
 
 .conn-tag {
   flex-shrink: 0;
+}
+
+.cap-alert {
+  flex-basis: 100%;
 }
 
 .status-dot {
