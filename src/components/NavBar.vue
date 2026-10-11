@@ -20,7 +20,7 @@ import { computed, onMounted, reactive } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { MenuOption } from 'naive-ui'
 import { useSSE } from '../composables/useSSE'
-import http from '@/api/http'
+import { getCapabilities, type Capabilities } from '@/api/capabilities'
 import { eventBus } from '../utils/eventBus'
 
 const route = useRoute()
@@ -28,14 +28,12 @@ const router = useRouter()
 
 const SSE_URL = import.meta.env.VITE_SSE_URL || '/api/v1/sse/events'
 
-interface Capabilities {
-  gb: boolean
-  debug: boolean
-}
-
+// Default to all-visible: when the capabilities request fails, keep every
+// menu entry so the UI does not lose pages while the server is unavailable.
 const capabilities = reactive<Capabilities>({
-  gb: false,
-  debug: false
+  gb: true,
+  gb_device: true,
+  debug: true
 })
 
 const { status, connect } = useSSE({
@@ -84,26 +82,31 @@ const baseMenuItems: MenuItem[] = [
   { name: 'Home', path: '/' },
   { name: 'Media', path: '/media' },
   { name: 'FLV Player', path: '/flv' },
-  { name: 'About', path: '/about' }
+  { name: 'Admin', path: '/admin' }
 ]
 
-const gbMenuItems: MenuItem[] = [
-  { name: 'GB', path: '/gb' },
-  { name: 'GB Device', path: '/gb-device' }
-]
+const aboutMenuItem: MenuItem = { name: 'About', path: '/about' }
 
+const gbMenuItem: MenuItem = { name: 'GB', path: '/gb' }
+const gbDeviceMenuItem: MenuItem = { name: 'GB Device', path: '/gb-device' }
 const debugMenuItem: MenuItem = { name: 'Debug', path: '/debug' }
 
 const menuOptions = computed<MenuOption[]>(() => {
   const items = [...baseMenuItems]
 
   if (capabilities.gb) {
-    items.splice(3, 0, ...gbMenuItems)
+    items.push(gbMenuItem)
+  }
+
+  if (capabilities.gb_device) {
+    items.push(gbDeviceMenuItem)
   }
 
   if (capabilities.debug) {
-    items.splice(items.length - 1, 0, debugMenuItem)
+    items.push(debugMenuItem)
   }
+
+  items.push(aboutMenuItem)
 
   return items.map((item) => ({ label: item.name, key: item.path }))
 })
@@ -116,13 +119,12 @@ const onMenuSelect = (key: string) => {
 
 async function fetchCapabilities() {
   try {
-    const response = await http.post('/api/v1/sys_info', { cmd: 'sys_info' })
-    const caps = response.data?.data?.capabilities
-    if (caps) {
-      capabilities.gb = !!caps.gb
-      capabilities.debug = !!caps.debug
-    }
+    const caps = await getCapabilities()
+    capabilities.gb = !!caps.gb
+    capabilities.gb_device = !!caps.gb_device
+    capabilities.debug = !!caps.debug
   } catch (error) {
+    // Keep all menus visible when capabilities are unavailable.
     console.error('Failed to fetch capabilities:', error)
   }
 }
