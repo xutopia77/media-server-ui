@@ -36,7 +36,7 @@ watch(
       videoEl.value.srcObject = stream
     }
   },
-  { immediate: true }
+  { immediate: true, flush: 'post' }
 )
 </script>
 
